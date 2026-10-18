@@ -22,6 +22,7 @@ model User {
   name         String
   email        String   @unique
   phone        String?
+  photoUrl     String?
   passwordHash String
   orgType      String? // OrgType, customers only
   createdAt    DateTime @default(now())
@@ -32,10 +33,13 @@ model User {
   participations  GroupBuyParticipant[]
   bids            Bid[]
   events          Event[]
+  chatMessages    ChatMessage[]
+  pickupTexts     PickupText[]
 }
 
 model ProducerProfile {
   userId             String  @id
+  producerType       String @default("local_farmer")
   farmName           String
   serviceRadiusMiles Int
   farmLatitude       Float
@@ -78,6 +82,7 @@ model PickupLocation {
 model GroupBuy {
   id                String   @id @default(cuid())
   produceTypeId     String
+  priceCentsPerLb   Int?
   targetLbsX100     Int
   pickupLocationId  String
   pickupWindowStart DateTime
@@ -97,6 +102,8 @@ model GroupBuy {
   participants   GroupBuyParticipant[]
   bids           Bid[]                 @relation("GroupBuyBids")
   events         Event[]
+  chatMessages   ChatMessage[]
+  pickupTexts    PickupText[]
 
   @@index([status, produceTypeId])
   @@index([pickupLocationId])
@@ -185,4 +192,34 @@ model DistributionCenterBaseline {
   updatedAt     DateTime
 
   @@id([produceType, region])
+}
+
+/// Website conversation between the customers on a group buy and the selected farmer.
+model ChatMessage {
+  id           String   @id @default(cuid())
+  groupBuyId   String
+  authorUserId String
+  body         String
+  createdAt    DateTime @default(now())
+
+  groupBuy GroupBuy @relation(fields: [groupBuyId], references: [id], onDelete: Cascade)
+  author   User     @relation(fields: [authorUserId], references: [id])
+
+  @@index([groupBuyId, createdAt])
+}
+
+/// One Photon SMS attempt per customer when the farmer confirms a funded pickup.
+model PickupText {
+  id               String   @id @default(cuid())
+  groupBuyId       String
+  userId           String
+  status           String // PickupTextStatus
+  photonMessageId  String?
+  detail           String?
+  createdAt        DateTime @default(now())
+
+  groupBuy GroupBuy @relation(fields: [groupBuyId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([groupBuyId, userId])
 }

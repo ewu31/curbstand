@@ -1,0 +1,9 @@
+---
+import Page from '../../../layouts/Page.astro';
+
+const { id } = Astro.params;
+if (!id) {
+  Astro.response.status = 404;
+}
+---
+<Page page={id ? 'purchase' : 'not-found'} groupBuyId={id ?? ''} />

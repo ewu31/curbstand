@@ -5,3 +5,4 @@ export * from "./errors";
 export * from "./catalog";
 export * from "./schemas/auth";
 export * from "./schemas/group-buys";
+export * from "./schemas/chat";

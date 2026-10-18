@@ -4,6 +4,7 @@ import { createBidSchema, createGroupBuySchema, listGroupBuysQuerySchema } from 
 const validGroupBuy = {
   produceType: "apples",
   targetLbs: "50",
+  pricePerLbUsd: "1.85",
   pickupLocationId: "ballard-commons",
   joinDeadline: "2026-10-20T17:00:00-07:00",
   bidDeadline: "2026-10-21T17:00:00-07:00",
@@ -23,7 +24,7 @@ describe("createGroupBuySchema", () => {
       ...validGroupBuy,
       produceType: "durian",
       pickupLocationId: "my-house",
-      joinDeadline: "2026-10-22T17:00:00-07:00",
+      joinDeadline: "2026-10-25T17:00:00-07:00",
       pickupWindowEnd: "2026-10-24T09:00:00-07:00",
     });
     expect(r.success).toBe(false);
@@ -32,7 +33,7 @@ describe("createGroupBuySchema", () => {
   });
 
   it("checks schedule order", () => {
-    const r = createGroupBuySchema.safeParse({ ...validGroupBuy, joinDeadline: "2026-10-22T17:00:00-07:00" });
+    const r = createGroupBuySchema.safeParse({ ...validGroupBuy, joinDeadline: "2026-10-25T17:00:00-07:00" });
     expect(r.error!.issues.map((i) => i.path.join("."))).toEqual(["joinDeadline"]);
   });
 

@@ -1,3 +1,4 @@
-# @curbstand/web
+# Frontend location
 
-Reserved for Task 2 (frontend). Import shared types from `@curbstand/shared`.
+The Astro frontend lives in [`web`](../../web/README.md). Run `npm run dev`
+from the repository root to start it with the Docker API.
