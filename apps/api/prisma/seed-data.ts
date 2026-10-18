@@ -19,9 +19,9 @@ export async function seedDemoUsers(prisma: PrismaClient) {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
   const customers = [
-    { email: "alice@demo.curbstand.app", name: "Alice Nguyen", orgType: "individual", phone: "+12065550101" },
-    { email: "bob@demo.curbstand.app", name: "Bob Martinez", orgType: "individual", phone: "+12065550102" },
-    { email: "kitchen@demo.curbstand.app", name: "Ballard Bistro", orgType: "restaurant", phone: "+12065550103" },
+    { email: "alice@demo.curbstand.app", name: "Alice Nguyen", orgType: "individual", phone: "+12065550101", photoUrl: "/avatars/alice.svg" },
+    { email: "bob@demo.curbstand.app", name: "Bob Martinez", orgType: "individual", phone: "+12065550102", photoUrl: "/avatars/bob.svg" },
+    { email: "kitchen@demo.curbstand.app", name: "Ballard Bistro", orgType: "restaurant", phone: "+12065550103", photoUrl: "/avatars/bistro.svg" },
   ];
   for (const c of customers) {
     await prisma.user.upsert({
@@ -42,6 +42,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
       orgType: "individual",
       isOperator: true,
       phone: "+12065550107",
+      photoUrl: "/avatars/operator.svg",
       passwordHash,
     },
   });
@@ -55,6 +56,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
       email: "farmer.joe@demo.curbstand.app",
       name: "Joe Yamamoto",
       phone: "+12065550105",
+      photoUrl: "/avatars/joe.svg",
       farmName: "Skagit Valley Growers",
       producerType: "local_farmer",
       serviceRadiusMiles: 80,
@@ -66,6 +68,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
       email: "farmer.maria@demo.curbstand.app",
       name: "Maria Lopez",
       phone: "+12065550106",
+      photoUrl: "/avatars/maria.svg",
       farmName: "Yakima Orchard Co.",
       producerType: "large_scale_farmer",
       serviceRadiusMiles: 160,
@@ -77,6 +80,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
       email: "farmer.sam@demo.curbstand.app",
       name: "Sam Okafor",
       phone: "+12065550104",
+      photoUrl: "/avatars/okafor.svg",
       farmName: "Snoqualmie Greens",
       producerType: "at_home",
       serviceRadiusMiles: 40,

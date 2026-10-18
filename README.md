@@ -47,7 +47,7 @@ pickup text.
 
 | Concern | Choice |
 | --- | --- |
-| Language | TypeScript (ESM), Node ≥ 22.12 (`.nvmrc`: 22), npm workspaces |
+| Language | TypeScript (ESM), Node ≥ 22.22 (`.nvmrc`: 22.23.2), npm workspaces |
 | API | Fastify 5 (`apps/api`), run with `tsx` (no build step) |
 | Database | SQLite via Prisma 6 (`apps/api/prisma/schema.prisma`) |
 | Auth | Stateless JWT bearer tokens (HS256, `jose`), bcrypt password hashes |

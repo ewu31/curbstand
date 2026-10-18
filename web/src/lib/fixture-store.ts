@@ -81,7 +81,12 @@ export function createGroupBuy(input: CreateGroupBuyInput, userId: string | null
     produceType: input.produceType,
     targetLbs: input.targetLbs,
     pricePerLb: input.pricePerLb,
-    seller: { id: account.id, name: account.name, photoUrl: "photoUrl" in account ? account.photoUrl : "/avatars/guest.svg", producerType: ("producerType" in account ? account.producerType : undefined) ?? "local_farmer" },
+    seller: {
+      ...(account.id ? { id: account.id } : {}),
+      name: account.name,
+      photoUrl: "photoUrl" in account && typeof account.photoUrl === "string" ? account.photoUrl : "/avatars/guest.svg",
+      producerType: "producerType" in account && account.producerType ? account.producerType : "local_farmer",
+    },
     committedLbs: 0,
     remainingLbs: input.targetLbs,
     status: "open",
