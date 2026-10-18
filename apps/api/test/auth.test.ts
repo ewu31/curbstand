@@ -128,3 +128,58 @@ describe("GET /me", () => {
     }
   });
 });
+
+describe("PATCH /me", () => {
+  const patch = (auth: Record<string, string>, payload: unknown) =>
+    app.inject({ method: "PATCH", url: "/me", headers: auth, payload: payload as object });
+
+  it("updates customer fields and clears phone with null", async () => {
+    const { auth } = await signup(app, customerSignup({ phone: "206-555-0100" }));
+    const res = await patch(auth, { name: "New Name", orgType: "restaurant", phone: null });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user).toMatchObject({ name: "New Name", orgType: "restaurant", phone: null });
+    // persisted
+    expect((await app.inject({ method: "GET", url: "/me", headers: auth })).json().user.name).toBe("New Name");
+  });
+
+  it("updates producer profile fields and replaces produce types", async () => {
+    const { auth } = await signup(app, producerSignup({ produceTypes: ["apples", "pears"] }));
+    const res = await patch(auth, { farmName: "Renamed Farm", produceTypes: ["kale"], serviceRadiusMiles: 25 });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user.producerProfile).toMatchObject({
+      farmName: "Renamed Farm",
+      produceTypes: ["kale"],
+      serviceRadiusMiles: 25,
+      farmLatitude: 47.6,
+    });
+  });
+
+  it("updates only the user name for a producer without touching the profile", async () => {
+    const { auth, user } = await signup(app, producerSignup());
+    const res = await patch(auth, { name: "Just A Name" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().user.producerProfile).toEqual(user.producerProfile);
+  });
+
+  it("rejects fields from the other role, immutable fields, and empty bodies", async () => {
+    const customer = await signup(app, customerSignup());
+    const producer = await signup(app, producerSignup());
+    for (const [auth, payload] of [
+      [customer.auth, { farmName: "Nope" }],
+      [producer.auth, { orgType: "restaurant" }],
+      [customer.auth, { role: "producer" }],
+      [customer.auth, { email: "new@test.local" }],
+      [customer.auth, { password: "new-password" }],
+      [customer.auth, {}],
+      [producer.auth, { produceTypes: [] }],
+    ] as const) {
+      const res = await patch(auth, payload);
+      expect(res.statusCode, JSON.stringify(payload)).toBe(400);
+      expect(res.json().error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("returns 401 without a token", async () => {
+    expect((await patch({}, { name: "x" })).statusCode).toBe(401);
+  });
+});

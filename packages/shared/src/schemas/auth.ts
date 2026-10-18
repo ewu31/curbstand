@@ -5,14 +5,22 @@ import { PRODUCE_TYPE_IDS } from "../catalog";
 const email = z.email().transform((e) => e.trim().toLowerCase());
 const password = z.string().min(8, "Password must be at least 8 characters").max(128);
 const name = z.string().trim().min(1).max(100);
-const phone = z.string().trim().min(7).max(30).optional();
+const phone = z.string().trim().min(7).max(30);
+const farmName = z.string().trim().min(1).max(100);
+const produceTypes = z
+  .array(z.enum(PRODUCE_TYPE_IDS as [string, ...string[]]))
+  .min(1)
+  .transform((ids) => [...new Set(ids)]);
+const serviceRadiusMiles = z.number().int().min(1).max(250);
+const farmLatitude = z.number().min(-90).max(90);
+const farmLongitude = z.number().min(-180).max(180);
 
 export const customerSignupSchema = z.object({
   role: z.literal("customer"),
   email,
   password,
   name,
-  phone,
+  phone: phone.optional(),
   orgType: z.enum(ORG_TYPES),
 });
 
@@ -21,19 +29,46 @@ export const producerSignupSchema = z.object({
   email,
   password,
   name,
-  phone,
-  farmName: z.string().trim().min(1).max(100),
-  produceTypes: z
-    .array(z.enum(PRODUCE_TYPE_IDS as [string, ...string[]]))
-    .min(1)
-    .transform((ids) => [...new Set(ids)]),
-  serviceRadiusMiles: z.number().int().min(1).max(250),
-  farmLatitude: z.number().min(-90).max(90),
-  farmLongitude: z.number().min(-180).max(180),
+  phone: phone.optional(),
+  farmName,
+  produceTypes,
+  serviceRadiusMiles,
+  farmLatitude,
+  farmLongitude,
 });
 
 export const signupSchema = z.discriminatedUnion("role", [customerSignupSchema, producerSignupSchema]);
 export type SignupInput = z.input<typeof signupSchema>;
+
+// PATCH /me — partial update of the caller's own profile. Role, email, and password are not
+// editable here. `phone: null` clears the phone number. At least one field is required.
+const atLeastOneField = (o: object) => Object.values(o).some((v) => v !== undefined);
+const nonEmptyUpdate = "Provide at least one field to update";
+
+export const updateCustomerProfileSchema = z
+  .object({
+    name: name.optional(),
+    phone: phone.nullable().optional(),
+    orgType: z.enum(ORG_TYPES).optional(),
+  })
+  .strict()
+  .refine(atLeastOneField, nonEmptyUpdate);
+
+export const updateProducerProfileSchema = z
+  .object({
+    name: name.optional(),
+    phone: phone.nullable().optional(),
+    farmName: farmName.optional(),
+    produceTypes: produceTypes.optional(),
+    serviceRadiusMiles: serviceRadiusMiles.optional(),
+    farmLatitude: farmLatitude.optional(),
+    farmLongitude: farmLongitude.optional(),
+  })
+  .strict()
+  .refine(atLeastOneField, nonEmptyUpdate);
+
+export type UpdateCustomerProfileInput = z.input<typeof updateCustomerProfileSchema>;
+export type UpdateProducerProfileInput = z.input<typeof updateProducerProfileSchema>;
 
 export const loginSchema = z.object({
   email,

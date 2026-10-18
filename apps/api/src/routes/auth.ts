@@ -1,4 +1,11 @@
-import { loginSchema, signupSchema, type AuthResponse, type MeResponse } from "@curbstand/shared";
+import {
+  loginSchema,
+  signupSchema,
+  updateCustomerProfileSchema,
+  updateProducerProfileSchema,
+  type AuthResponse,
+  type MeResponse,
+} from "@curbstand/shared";
 import { Prisma } from "@prisma/client";
 import type { FastifyPluginAsync } from "fastify";
 import { authUser, requireAuth } from "../auth/guards";
@@ -61,6 +68,43 @@ const routes: FastifyPluginAsync = async (app) => {
       include: userProfileInclude,
     });
     if (!user) throw notFound("User not found");
+    return { user: toUserProfile(user) };
+  });
+
+  // Users can only edit their own profile; the schema is chosen by the caller's role,
+  // so a customer sending producer fields gets a 400 (unknown keys are rejected).
+  app.patch("/me", { preHandler: requireAuth }, async (request): Promise<MeResponse> => {
+    const { id, role } = authUser(request);
+
+    if (role === "customer") {
+      const input = updateCustomerProfileSchema.parse(request.body);
+      const user = await prisma.user.update({
+        where: { id },
+        data: { name: input.name, phone: input.phone, orgType: input.orgType },
+        include: userProfileInclude,
+      });
+      return { user: toUserProfile(user) };
+    }
+
+    const { name, phone, produceTypes, ...profile } = updateProducerProfileSchema.parse(request.body);
+    const user = await prisma.$transaction(async (tx) => {
+      if (produceTypes) {
+        await tx.producerProduceType.deleteMany({ where: { producerId: id } });
+        await tx.producerProduceType.createMany({
+          data: produceTypes.map((produceTypeId) => ({ producerId: id, produceTypeId })),
+        });
+      }
+      const hasProfileFields = Object.values(profile).some((v) => v !== undefined);
+      return tx.user.update({
+        where: { id },
+        data: {
+          name,
+          phone,
+          producerProfile: hasProfileFields ? { update: profile } : undefined,
+        },
+        include: userProfileInclude,
+      });
+    });
     return { user: toUserProfile(user) };
   });
 };

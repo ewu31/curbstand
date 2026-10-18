@@ -63,6 +63,7 @@ npm run typecheck
 | `POST /auth/signup` | — | 201 `{ token, user }`; body is `signupSchema` (discriminated on `role`) |
 | `POST /auth/login` | — | `{ token, user }`; 401 `INVALID_CREDENTIALS` |
 | `GET /me` | any | `{ user }` |
+| `PATCH /me` | any | `{ user }`; partial update of own profile. Customer: `name`, `phone`, `orgType`. Producer: `name`, `phone`, `farmName`, `produceTypes` (replaces the list), `serviceRadiusMiles`, `farmLatitude`, `farmLongitude`. `phone: null` clears it. Role, email, and password are not editable; unknown or other-role fields are a 400. |
 | `GET /produce-types` | — | Controlled catalog |
 | `GET /pickup-locations` | — | Approved public pickup locations |
 
@@ -106,6 +107,36 @@ strings; validate with these lists (`isOneOf`, `z.enum(...)`).
 
 **Location matching.** Producers have `farmLatitude`/`farmLongitude` and
 `serviceRadiusMiles`; use `distanceMiles()` against the pickup location.
+
+## Group-buy contract (Tasks 2–4)
+
+Request schemas and response types live in
+`packages/shared/src/schemas/group-buys.ts`. Use them on both sides instead of
+redefining shapes.
+
+- **Requests:** `listGroupBuysQuerySchema`, `createGroupBuySchema` (also checks
+  `joinDeadline ≤ bidDeadline ≤ pickupWindowStart < pickupWindowEnd`),
+  `joinGroupBuySchema`, `updateGroupBuyStatusSchema`, `createBidSchema`,
+  `selectBidSchema`. Parsing converts to storage units: cents, lbs×100, `Date`.
+  Checks that depend on the clock ("deadline not passed") and on DB state are
+  left to the route.
+- **Responses:** `GroupBuySummary`, `GroupBuyDetail` (adds `selectedBid`,
+  `myParticipation`, `participants`, `depositSummary` with `simulated: true`,
+  and `events` oldest first), `ParticipantDto`, `BidDto`, `EventDto`.
+- **Envelopes:** one named key per resource: `{ groupBuys }`, `{ groupBuy }`,
+  `{ participant }`, `{ bid }`, `{ bids }` (sorted by `pricePerLbUsd`).
+- **Server serializers** (`apps/api/src/lib/serializers.ts`): load with the
+  matching include, then serialize:
+
+  ```ts
+  const row = await prisma.groupBuy.findUnique({ where: { id }, include: groupBuyDetailInclude });
+  return { groupBuy: toGroupBuyDetail(row, authUser(request).id, config.depositAmountCents) };
+  ```
+
+  Others: `toGroupBuySummary` + `groupBuySummaryInclude`, `toBid` +
+  `bidInclude`, `toParticipant` + `participantInclude`, `toEvent`,
+  `toDepositSummary`, `committedLbsX100`. An unknown status string in the DB
+  throws instead of being passed through.
 
 ## Adding routes (Tasks 3 and 4)
 
