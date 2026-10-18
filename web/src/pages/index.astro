@@ -1,0 +1,8 @@
+---
+import Page from '../layouts/Page.astro';
+
+const produce = Astro.url.searchParams.get('produce') ?? '';
+const location = Astro.url.searchParams.get('location') ?? '';
+const query = Astro.url.searchParams.get('q') ?? '';
+---
+<Page page="browse" produce={produce} location={location} query={query} />

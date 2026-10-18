@@ -73,8 +73,13 @@ export const EVENT_TYPES = [
   "bid.submitted",
   "bid.selected",
   "fulfillment.confirmed",
+  "pickup.text_notified",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
+
+/** Result of the Photon SMS sent when a farmer confirms a funded pickup. */
+export const PICKUP_TEXT_STATUSES = ["sent", "skipped_no_phone", "not_configured", "failed"] as const;
+export type PickupTextStatus = (typeof PICKUP_TEXT_STATUSES)[number];
 
 export function isOneOf<T extends string>(list: readonly T[], value: unknown): value is T {
   return typeof value === "string" && (list as readonly string[]).includes(value);

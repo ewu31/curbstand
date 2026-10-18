@@ -1,0 +1,1 @@
+ALTER TABLE "GroupBuy" ADD COLUMN "priceCentsPerLb" INTEGER;

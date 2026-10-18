@@ -1,0 +1,23 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      DATABASE_URL: file:/data/curbstand.db
+      JWT_SECRET: ${JWT_SECRET:-local-docker-development-secret-change-in-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4321,http://127.0.0.1:4321}
+    volumes:
+      - api-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+volumes:
+  api-data:

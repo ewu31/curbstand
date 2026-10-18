@@ -17,7 +17,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16).optional(),
   JWT_EXPIRES_IN: z.string().default("7d"),
   DEPOSIT_AMOUNT_USD: z.string().default("5.00"),
-  CORS_ORIGINS: z.string().default("http://localhost:5173"),
+  CORS_ORIGINS: z.string().default("http://localhost:4321,http://127.0.0.1:4321,http://localhost:5173"),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(64 * 1024),

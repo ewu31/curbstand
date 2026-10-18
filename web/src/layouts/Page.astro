@@ -1,0 +1,21 @@
+---
+import App from '../components/App';
+import '../styles/app.css';
+
+const { page = 'browse', groupBuyId = '', produce = '', location = '', query = '' } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Group buys for produce in Seattle and the Puget Sound." />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Curbstand</title>
+  </head>
+  <body>
+    <App page={page} groupBuyId={groupBuyId} produce={produce} location={location} query={query} client:load />
+    <noscript><p class="status-line">JavaScript is required to use Curbstand.</p></noscript>
+  </body>
+</html>

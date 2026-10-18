@@ -7,16 +7,30 @@
     "apps/*"
   ],
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.22.0"
   },
   "scripts": {
-    "dev": "npm run dev -w @curbstand/api",
+    "dev": "npm run server:up && npm run dev:web",
     "db:setup": "npm run db:setup -w @curbstand/api",
     "db:reset": "npm run db:reset -w @curbstand/api",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "start": "npm run start -w @curbstand/api",
     "db:migrate": "npm run db:migrate -w @curbstand/api",
-    "db:seed": "npm run db:seed -w @curbstand/api"
+    "db:seed": "npm run db:seed -w @curbstand/api",
+    "dev:web": "npm run dev --prefix web",
+    "dev:api": "npm run dev -w @curbstand/api",
+    "demo:web": "npm run demo --prefix web",
+    "astro": "npm run astro --prefix web --",
+    "stop:web": "npm run astro --prefix web -- dev stop",
+    "build:web": "npm run build --prefix web",
+    "build": "npm run typecheck && npm run build:web",
+    "check:web": "npm run check --prefix web",
+    "test:web": "npm test --prefix web",
+    "server:up": "docker compose up --build --detach --wait",
+    "server:down": "docker compose down",
+    "server:logs": "docker compose logs --follow api",
+    "server:seed": "docker compose exec api npm run db:seed",
+    "test:integration": "npm run server:up && npm run test:live --prefix web"
   }
 }
