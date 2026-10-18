@@ -1,0 +1,22 @@
+{
+  "name": "curbstand",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @curbstand/db && npm run build --workspace @curbstand/api",
+    "typecheck": "npm run build --workspace @curbstand/db && npm run typecheck --workspace @curbstand/api",
+    "db:generate": "npm run db:generate --workspace @curbstand/db",
+    "db:migrate": "npm run db:migrate --workspace @curbstand/db",
+    "db:seed": "npm run db:seed --workspace @curbstand/db",
+    "start": "npm run start --workspace @curbstand/api"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
