@@ -1,6 +1,15 @@
-import { prisma } from "@curbstand/db";
-import { createApp } from "./app.js";
+import { buildApp } from "./app";
+import { config } from "./config";
+import { prisma } from "./lib/db";
 
-const port = Number(process.env.API_PORT ?? 8787);
-const app = createApp(prisma);
-await app.listen({ port, host: "0.0.0.0" });
+const app = await buildApp();
+
+const shutdown = async () => {
+  await app.close();
+  await prisma.$disconnect();
+  process.exit(0);
+};
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+await app.listen({ port: config.port, host: config.host });
