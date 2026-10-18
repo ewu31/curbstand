@@ -16,7 +16,10 @@ import { HttpError, notFound } from "../lib/errors";
 import { toUserProfile, userProfileInclude } from "../lib/serializers";
 
 const routes: FastifyPluginAsync = async (app) => {
-  app.post("/auth/signup", async (request, reply): Promise<AuthResponse> => {
+  // Per-IP throttle on credential endpoints to slow password guessing and signup spam.
+  const rateLimit = { max: app.authRateLimit.max, timeWindow: app.authRateLimit.timeWindowMs };
+
+  app.post("/auth/signup", { config: { rateLimit } }, async (request, reply): Promise<AuthResponse> => {
     const input = signupSchema.parse(request.body);
     const passwordHash = await hashPassword(input.password);
 
@@ -54,7 +57,7 @@ const routes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.post("/auth/login", async (request): Promise<AuthResponse> => {
+  app.post("/auth/login", { config: { rateLimit } }, async (request): Promise<AuthResponse> => {
     const { email, password } = loginSchema.parse(request.body);
     const user = await prisma.user.findUnique({ where: { email }, include: userProfileInclude });
     const ok = await verifyPassword(password, user?.passwordHash ?? (await getDummyHash()));

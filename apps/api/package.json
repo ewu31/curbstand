@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@curbstand/shared": "*",
+    "@fastify/rate-limit": "^10.3.0",
     "@prisma/client": "6.19.3",
     "bcryptjs": "^3.0.3",
     "fastify": "^5.12.7",

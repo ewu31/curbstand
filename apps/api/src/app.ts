@@ -1,9 +1,21 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyPluginAsync, type FastifyServerOptions } from "fastify";
 import { config } from "./config";
-import { registerErrorHandling } from "./lib/errors";
+import { HttpError, registerErrorHandling } from "./lib/errors";
+
+export interface AppOptions extends FastifyServerOptions {
+  /** Overrides config.authRateLimit (tests). */
+  authRateLimit?: { max: number; timeWindowMs: number };
+}
+
+declare module "fastify" {
+  interface FastifyInstance {
+    authRateLimit: { max: number; timeWindowMs: number };
+  }
+}
 
 const routesDir = join(fileURLToPath(new URL(".", import.meta.url)), "routes");
 
@@ -22,8 +34,9 @@ async function registerRoutes(app: ReturnType<typeof Fastify>) {
   }
 }
 
-export async function buildApp(opts: FastifyServerOptions = {}) {
+export async function buildApp({ authRateLimit, ...opts }: AppOptions = {}) {
   const app = Fastify({
+    bodyLimit: config.bodyLimitBytes,
     logger: {
       level: config.nodeEnv === "test" ? "silent" : "info",
       redact: ["req.headers.authorization", "req.headers.cookie"],
@@ -32,6 +45,14 @@ export async function buildApp(opts: FastifyServerOptions = {}) {
   });
 
   app.decorateRequest("authUser", null);
+  app.decorate("authRateLimit", authRateLimit ?? config.authRateLimit);
+
+  // Opt-in per route via `config: { rateLimit: {...} }` (see routes/auth.ts).
+  await app.register(rateLimit, {
+    global: false,
+    errorResponseBuilder: (_request, context) =>
+      new HttpError("RATE_LIMITED", `Too many attempts. Try again in ${context.after}.`),
+  });
 
   // Minimal CORS for the frontend dev server (no credentials; bearer tokens only).
   app.addHook("onRequest", async (request, reply) => {

@@ -41,6 +41,9 @@ export function registerErrorHandling(app: FastifyInstance) {
       return reply.status(400).send(body("VALIDATION_ERROR", "Invalid request", issues));
     }
     // Fastify's own client errors (malformed JSON, body too large, ...)
+    if (err.statusCode === 413) {
+      return reply.status(413).send(body("PAYLOAD_TOO_LARGE", "Request body is too large"));
+    }
     if (err.statusCode && err.statusCode >= 400 && err.statusCode < 500) {
       return reply.status(err.statusCode).send(body("VALIDATION_ERROR", err.message));
     }

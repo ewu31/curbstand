@@ -43,6 +43,8 @@ npm run typecheck
 | `PORT` / `HOST` | `8787` / `127.0.0.1` | |
 | `DEPOSIT_AMOUNT_USD` | `5.00` | Fixed simulated deposit per participation (`config.depositAmountCents`) |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated |
+| `AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_MS` | `10` / `60000` | Per-IP limit on signup and login; returns 429 `RATE_LIMITED` |
+| `BODY_LIMIT_BYTES` | `65536` | Larger bodies get 413 `PAYLOAD_TOO_LARGE` |
 
 ### Demo accounts (seeded, password `password123`)
 
@@ -76,7 +78,7 @@ Send the token as `Authorization: Bearer <token>`. `user` is `UserProfile` from
 `{ "error": { "code": "...", "message": "...", "details"?: ... } }`. Codes and
 statuses are in `ERROR_CODES` (`packages/shared/src/errors.ts`):
 `400 VALIDATION_ERROR`, `401 UNAUTHORIZED | INVALID_CREDENTIALS`,
-`403 FORBIDDEN`, `404 NOT_FOUND`,
+`403 FORBIDDEN`, `404 NOT_FOUND`, `413 PAYLOAD_TOO_LARGE`, `429 RATE_LIMITED`,
 `409 CONFLICT | EMAIL_TAKEN | INVALID_TRANSITION | DEADLINE_PASSED`,
 `500 INTERNAL_ERROR`. On the server, throw `HttpError` or a helper
 (`forbidden()`, `conflict()`, `invalidTransition(from, to)`,

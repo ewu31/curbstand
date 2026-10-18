@@ -18,6 +18,9 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("7d"),
   DEPOSIT_AMOUNT_USD: z.string().default("5.00"),
   CORS_ORIGINS: z.string().default("http://localhost:5173"),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(64 * 1024),
 });
 
 const env = envSchema.parse(process.env);
@@ -35,4 +38,7 @@ export const config = {
   /** Fixed simulated deposit per participation, in cents. */
   depositAmountCents: parseFixed2(env.DEPOSIT_AMOUNT_USD),
   corsOrigins: env.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
+  /** Per-IP attempts per window on /auth/signup and /auth/login. */
+  authRateLimit: { max: env.AUTH_RATE_LIMIT_MAX, timeWindowMs: env.AUTH_RATE_LIMIT_WINDOW_MS },
+  bodyLimitBytes: env.BODY_LIMIT_BYTES,
 } as const;

@@ -1,6 +1,6 @@
 import type { SignupInput } from "@curbstand/shared";
 import type { FastifyInstance } from "fastify";
-import { buildApp } from "../src/app";
+import { buildApp, type AppOptions } from "../src/app";
 import { prisma } from "../src/lib/db";
 import { seedCatalog } from "../prisma/seed-data";
 
@@ -9,12 +9,12 @@ export { prisma };
 let seeded = false;
 
 /** Builds the app against the test DB with the catalog seeded. Close it in afterAll. */
-export async function createTestApp(): Promise<FastifyInstance> {
+export async function createTestApp(options: AppOptions = {}): Promise<FastifyInstance> {
   if (!seeded) {
     await seedCatalog(prisma);
     seeded = true;
   }
-  const app = await buildApp();
+  const app = await buildApp(options);
   await app.ready();
   return app;
 }
