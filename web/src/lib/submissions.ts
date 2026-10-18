@@ -1,6 +1,6 @@
 import { pacificInputToIso, pacificInputValue } from "./format";
 import { growers, type Person } from "./people";
-import type { GroupBuyDetail, GroupBuyEvent, Participant, PickupLocation, Produce, SellerProfile } from "./types";
+import type { DropProduct, GroupBuyDetail, GroupBuyEvent, Participant, PickupLocation, Produce, SellerProfile } from "./types";
 
 export const fixtureProduce: Produce[] = [
   { slug: "apples", displayName: "Apples" },
@@ -99,6 +99,10 @@ function drop(input: Omit<GroupBuyDetail, "committedLbs" | "remainingLbs"> & { c
   };
 }
 
+function products(produceType: string, pricePerLb: number, targetLbs: number): DropProduct[] {
+  return [{ id: `${produceType}-primary`, produceType, pricePerLb, availableLbs: targetLbs * 1.5 }];
+}
+
 /** Fifty produce drops. The apple and tomato rows keep the quantities the marketplace tests look for. */
 export function createFixtureDetails(): GroupBuyDetail[] {
   const createdAt = at(0, 8);
@@ -131,6 +135,8 @@ export function createFixtureDetails(): GroupBuyDetail[] {
       participants: [],
       bids: [],
       events: [event("evt-apples", "group_buy_created", createdAt)],
+      products: products("apples", prices.apples, 40),
+      imageUrls: ["/produce/apples.jpg"],
     }),
     drop({
       id: tomatoId,
@@ -152,6 +158,8 @@ export function createFixtureDetails(): GroupBuyDetail[] {
       participants: [participant("part-tomatoes", tomatoId, mayaId, 32, createdAt)],
       bids: [],
       events: [event("evt-tomatoes", "group_buy_created", createdAt)],
+      products: products("tomatoes", prices.tomatoes, 50),
+      imageUrls: ["/produce/tomatoes.jpg"],
     }),
   ];
 
@@ -185,6 +193,8 @@ export function createFixtureDetails(): GroupBuyDetail[] {
       participants: [],
       bids: [],
       events: [event(`evt-${index + 1}`, "group_buy_created", when)],
+      products: products(produce.slug, Math.round((prices[produce.slug] + (index % 3) * 0.07) * 100) / 100, target),
+      imageUrls: [`/produce/${produce.slug}.svg`],
     });
   });
 

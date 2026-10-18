@@ -17,6 +17,13 @@ export type Produce = {
   displayName: string;
 };
 
+export type DropProduct = {
+  id: string;
+  produceType: string;
+  pricePerLb: number;
+  availableLbs: number;
+};
+
 export type PickupLocation = {
   id: string;
   name: string;
@@ -89,6 +96,8 @@ export type GroupBuySummary = {
   createdAt: string;
   updatedAt: string;
   lowestBidPerLb: number | null;
+  products?: DropProduct[];
+  imageUrls?: string[];
 };
 
 export type GroupBuyDetail = Omit<GroupBuySummary, "lowestBidPerLb"> & {
@@ -103,7 +112,9 @@ export type Catalog = {
 };
 
 export type CreateGroupBuyInput = {
-  pricePerLb: number;
+  pricePerLb?: number;
+  products?: Array<Omit<DropProduct, "id">>;
+  imageUrls?: string[];
   produceType: string;
   targetLbs: number;
   pickupLocationId: string;

@@ -3,15 +3,18 @@ import { listGroupBuys } from "../lib/data";
 import { actionError } from "../lib/api-error";
 import { produceName } from "../lib/format";
 import type { Catalog, GroupBuySummary } from "../lib/types";
-import { recommendedDrops } from "../lib/drops";
+import { recommendationLabel, recommendedDrops } from "../lib/drops";
 import { placeLabel } from "../lib/format";
 import ListingCard from "./ListingCard";
+import type { Session } from "../lib/session";
+import { listMine } from "../lib/data";
 
-export default function Browse({ catalog, produce, location, query }: { catalog: Catalog | null; produce: string; location: string; query: string }) {
+export default function Browse({ catalog, produce, location, query, session }: { catalog: Catalog | null; produce: string; location: string; query: string; session: Session | null }) {
   const [sort, setSort] = useState("recommended");
   const [rows, setRows] = useState<GroupBuySummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [history, setHistory] = useState<GroupBuySummary[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -23,13 +26,27 @@ export default function Browse({ catalog, produce, location, query }: { catalog:
   return () => { active = false; };
   }, [produce, location, attempt]);
 
+  useEffect(() => {
+    if (!session?.id || session.role !== "customer") {
+      setHistory([]);
+      return;
+    }
+    listMine(session.id).then((mine) => setHistory(mine.joined)).catch(() => setHistory([]));
+  }, [session?.id, session?.role]);
+
   const visible = (rows ?? []).filter((groupBuy) => {
     if (!query.trim() || !catalog) return !query.trim();
     const haystack = `${produceName(groupBuy.produceType, catalog.produce)} ${groupBuy.pickupLocation?.name ?? ""} ${groupBuy.pickupLocation?.address ?? ""}`.toLowerCase();
     return haystack.includes(query.trim().toLowerCase());
   });
 
-  const sorted = sort === "soonest" ? [...visible].sort((a, b) => Date.parse(a.pickupWindowStart) - Date.parse(b.pickupWindowStart)) : recommendedDrops(visible);
+  const sorted = sort === "soonest"
+    ? [...visible].sort((a, b) => Date.parse(a.pickupWindowStart) - Date.parse(b.pickupWindowStart))
+    : sort === "price"
+      ? [...visible].sort((a, b) => (a.pricePerLb ?? Infinity) - (b.pricePerLb ?? Infinity))
+      : sort === "remaining"
+        ? [...visible].sort((a, b) => b.remainingLbs - a.remainingLbs)
+        : recommendedDrops(visible, history);
   function filterHref(nextProduce: string) {
     const params = new URLSearchParams();
     if (nextProduce) params.set("produce", nextProduce);
@@ -60,8 +77,8 @@ export default function Browse({ catalog, produce, location, query }: { catalog:
           </select>
         </form>
       </div>
-      <div className="feed-heading"><div><h2>Drops near you</h2><p>{sort === "recommended" ? "Drops close to their minimum come first." : "Your next pickup, first."}{rows && catalog ? ` ${visible.length} drops` : ""}</p></div>
-        <label className="sort-label">Sort by <select aria-label="Sort drops" value={sort} onChange={event => setSort(event.target.value)}><option value="recommended">Recommended</option><option value="soonest">Soonest pickup</option></select></label>
+      <div className="feed-heading"><div><h2>Drops near you</h2><p>{sort === "recommended" ? recommendationLabel(history) : sort === "price" ? "Lowest price per pound first." : sort === "remaining" ? "Most available pounds first." : "Your next pickup, first."}{rows && catalog ? ` ${visible.length} drops` : ""}</p></div>
+        <label className="sort-label">Sort by <select aria-label="Sort drops" value={sort} onChange={event => setSort(event.target.value)}><option value="recommended">Recommended</option><option value="price">Price / lb</option><option value="remaining">Most lb available</option><option value="soonest">Soonest pickup</option></select></label>
       </div>
       {error ? (
         <div className="empty">

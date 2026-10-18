@@ -33,7 +33,7 @@ function participant(row: Wire.ParticipantDto): Participant {
 function summary(row: Wire.GroupBuySummary): GroupBuySummary {
   return { ...row, produceType: row.produceType.id, pickupLocation: location(row.pickupLocation), createdBy: row.createdById,
     targetLbs: Number(row.targetLbs), committedLbs: Number(row.committedLbs), remainingLbs: Number(row.remainingLbs),
-    pricePerLb: row.pricePerLbUsd == null ? null : Number(row.pricePerLbUsd), seller: { id: row.createdById, name: row.sellerName, photoUrl: row.sellerPhotoUrl || "/avatars/guest.svg", ...(row.producerType ? { producerType: row.producerType } : {}) }, lowestBidPerLb: null };
+    pricePerLb: row.pricePerLbUsd == null ? null : Number(row.pricePerLbUsd), seller: { id: row.createdById, name: row.sellerName, photoUrl: row.sellerPhotoUrl || "/avatars/guest.svg", ...(row.producerType ? { producerType: row.producerType } : {}) }, lowestBidPerLb: null, products: undefined, imageUrls: undefined };
 }
 export async function getCatalog(): Promise<Catalog> {
   const [produce, locations] = await Promise.all([request<Wire.ProduceTypesResponse>("/produce-types"), request<Wire.PickupLocationsResponse>("/pickup-locations")]);
@@ -56,7 +56,18 @@ export async function getGroupBuy(id: string): Promise<GroupBuyDetail> {
   return { ...summary(groupBuy), participants: groupBuy.participants.map(participant), bids: groupBuy.selectedBid ? [bid(groupBuy.selectedBid)] : [], events: groupBuy.events };
 }
 export async function createGroupBuy(input: CreateGroupBuyInput, _userId: string | null): Promise<GroupBuySummary> {
-  const { groupBuy } = await request<Wire.GroupBuyResponse>("/group-buys", post({ ...input, targetLbs: input.targetLbs.toFixed(2), pricePerLbUsd: input.pricePerLb.toFixed(2) }));
+  const primaryPrice = input.pricePerLb ?? input.products?.[0]?.pricePerLb;
+  if (primaryPrice == null) throw new ApiError(400, "INVALID_REQUEST", "A price is required.");
+  const { groupBuy } = await request<Wire.GroupBuyResponse>("/group-buys", post({
+    produceType: input.produceType,
+    targetLbs: input.targetLbs.toFixed(2),
+    pricePerLbUsd: primaryPrice.toFixed(2),
+    pickupLocationId: input.pickupLocationId,
+    pickupWindowStart: input.pickupWindowStart,
+    pickupWindowEnd: input.pickupWindowEnd,
+    joinDeadline: input.joinDeadline,
+    bidDeadline: input.bidDeadline,
+  }));
   return summary(groupBuy);
 }
 export async function joinGroupBuy(id: string, requestedLbs: number, _userId: string | null): Promise<Participant> {

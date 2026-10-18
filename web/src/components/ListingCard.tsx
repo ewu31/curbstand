@@ -5,7 +5,8 @@ import { Seller } from "./DropExtras";
 
 export default function ListingCard({ groupBuy, produce }: { groupBuy: GroupBuySummary; produce: Produce[] }) {
   const name = produceName(groupBuy.produceType, produce);
-  const photo = producePhoto(groupBuy.produceType);
+  const photo = groupBuy.imageUrls?.[0] || producePhoto(groupBuy.produceType);
+  const productCount = groupBuy.products?.length ?? 1;
   const close = almostThere(groupBuy);
   return (
     <a className="card" href={`/group-buys/${groupBuy.id}`}>
@@ -14,7 +15,7 @@ export default function ListingCard({ groupBuy, produce }: { groupBuy: GroupBuyS
         <span className={close ? "drop-badge close" : "drop-badge"}>{close ? "Almost there" : statusLabel(groupBuy.status)}</span>
       </div>
       <div className="card-body">
-        <div className="card-heading"><h2 className="card-title">{name}</h2><p className={groupBuy.pricePerLb == null ? "price is-empty" : "price"}>{groupBuy.pricePerLb == null ? "Price unavailable" : perLb(groupBuy.pricePerLb)}</p></div>
+        <div className="card-heading"><h2 className="card-title">{productCount > 1 ? `${name} + ${productCount - 1} more` : name}</h2><p className={groupBuy.pricePerLb == null ? "price is-empty" : "price"}>{groupBuy.pricePerLb == null ? "Price unavailable" : perLb(groupBuy.pricePerLb)}</p></div>
         <Seller seller={groupBuy.seller} />
         <dl className="card-facts">
           <div><dt>Pickup</dt><dd>{placeLabel(groupBuy.pickupLocation)} · {pickupWhen(groupBuy.pickupWindowStart, groupBuy.pickupWindowEnd)}</dd></div>

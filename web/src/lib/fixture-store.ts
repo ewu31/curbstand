@@ -2,7 +2,7 @@ import { demoUsers } from "./demo-accounts";
 import { readSession } from "./session";
 import { ApiError } from "./api-error";
 import { createFixtureDetails, fixtureLocations, fixtureProduce, toSummary } from "./fixtures";
-import type { Catalog, CreateGroupBuyInput, DepositStatus, GroupBuyDetail, Mine, PickupLocation, Role } from "./types";
+import type { Catalog, CreateGroupBuyInput, DepositStatus, DropProduct, GroupBuyDetail, Mine, PickupLocation, Role } from "./types";
 
 const STORAGE_KEY = "curbstand.drops.v2";
 const IN_PROGRESS = new Set(["open", "funding", "matched", "ready_for_pickup"]);
@@ -76,17 +76,19 @@ export function createGroupBuy(input: CreateGroupBuyInput, userId: string | null
   const location = locationById(input.pickupLocationId);
   if (!location) throw new ApiError(400, "INVALID_PICKUP_LOCATION", "Pickup location is not approved");
   const now = new Date().toISOString();
+  const offeredProducts: DropProduct[] = (input.products?.length ? input.products : [{
+    produceType: input.produceType,
+    pricePerLb: input.pricePerLb ?? 0,
+    availableLbs: input.targetLbs,
+  }]).map((product, index) => ({ ...product, id: `${crypto.randomUUID()}-${index}` }));
+  const primary = offeredProducts[0];
+  const sellerPhoto: string = "photoUrl" in account && account.photoUrl ? account.photoUrl : "/avatars/guest.svg";
   const groupBuy: GroupBuyDetail = {
     id: crypto.randomUUID(),
     produceType: input.produceType,
     targetLbs: input.targetLbs,
-    pricePerLb: input.pricePerLb,
-    seller: {
-      ...(account.id ? { id: account.id } : {}),
-      name: account.name,
-      photoUrl: "photoUrl" in account && typeof account.photoUrl === "string" ? account.photoUrl : "/avatars/guest.svg",
-      producerType: "producerType" in account && account.producerType ? account.producerType : "local_farmer",
-    },
+    pricePerLb: primary.pricePerLb,
+    seller: { id: account.id ?? undefined, name: account.name, photoUrl: sellerPhoto },
     committedLbs: 0,
     remainingLbs: input.targetLbs,
     status: "open",
@@ -102,6 +104,8 @@ export function createGroupBuy(input: CreateGroupBuyInput, userId: string | null
     participants: [],
     bids: [],
     events: [{ id: crypto.randomUUID(), eventType: "group_buy_created", createdAt: now, payload: { status: "open" } }],
+    products: offeredProducts,
+    imageUrls: input.imageUrls ?? [],
   };
   const db = readDb();
   db.groupBuys.push(groupBuy);

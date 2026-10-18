@@ -253,10 +253,6 @@ a { color: inherit; }
 }
 
 .people li span, .activity li span { display: block; color: var(--muted); font-size: 13px; }
-.chat-log { max-height: 280px; overflow: auto; list-style: none; margin: 0 0 12px; padding: 0; }
-.chat-log li { padding: 8px 0; border-bottom: 1px solid var(--line); }
-.chat-form { display: flex; gap: 8px; }
-.chat-form input { flex: 1; border: 1px solid var(--field); border-radius: 8px; padding: 8px 10px; }
 
 .form-panel {
   max-width: 440px;
@@ -492,6 +488,14 @@ a { color: inherit; }
 .button, a.button { height: auto; min-height: 42px; padding: 10px 18px; border-radius: 5px; font-size: 14px; }
 .button.secondary { background: #e8ece3; }
 .form-panel { max-width: 560px; padding: 30px; border: 1px solid var(--line); margin: 32px auto; }
+.seller-form { max-width: 760px; }
+.product-editor, .product-selector { border: 1px solid var(--line); padding: 16px; margin: 18px 0; }
+.product-editor legend, .product-selector legend { padding: 0 6px; font-weight: 600; }
+.product-row { display: grid; grid-template-columns: minmax(150px, 1fr) 120px 120px auto; gap: 10px; align-items: end; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.product-choice { display: grid; grid-template-columns: 1fr 100px; align-items: center; }
+.photo-preview { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0 18px; }
+.photo-preview img { width: 92px; height: 72px; object-fit: cover; border-radius: 5px; border: 1px solid var(--line); }
+.drop-products ul { padding-left: 20px; color: var(--muted); }
 .form-panel .hint { margin-bottom: 20px; }
 .form-panel h1 { font-family: "Trebuchet MS", "Avenir Next", sans-serif; font-weight: 400; font-size: 30px; }
 .field { margin-bottom: 18px; }
@@ -531,7 +535,7 @@ a { color: inherit; }
   .listing-grid { gap: 20px; } .card-body { padding: 16px; } .card-heading { flex-wrap: wrap; gap: 8px; }
   .detail { grid-template-columns: 1fr; gap: 20px; } .detail-photo { position: static; aspect-ratio: 1.25; }
   .distributor-page { grid-template-columns: 1fr; gap: 10px; padding-top: 10px; }
-  .form-panel { padding: 22px; } .distributor-page .form-panel { max-width: none; }
+  .form-panel { padding: 22px; } .distributor-page .form-panel { max-width: none; } .product-row { grid-template-columns: 1fr 1fr; } .product-choice { grid-template-columns: 1fr 90px; }
   .site-footer { flex-wrap: wrap; gap: 16px; padding: 24px 20px; } .site-footer span:last-child { display: none; }
   .account-page { margin: 36px auto; }
 }
