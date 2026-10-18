@@ -14,11 +14,9 @@ export const createGroupBuy: typeof live.createGroupBuy = (...args) => source().
 export const joinGroupBuy: typeof live.joinGroupBuy = (...args) => source().joinGroupBuy(...args);
 export const updateStatus: typeof live.updateStatus = (...args) => source().updateStatus(...args);
 export const listMine: typeof live.listMine = (...args) => source().listMine(...args);
-export const updateDeposit: typeof fixtures.updateDeposit = (...args) => {
-  if (!isDemo) return Promise.reject(new ApiError(501, "UNAVAILABLE", "Deposit updates are awaiting backend support."));
-  return fixtures.updateDeposit(...args);
-};
-export const completePickup: typeof fixtures.completePickup = (...args) => {
-  if (!isDemo) return Promise.reject(new ApiError(501, "UNAVAILABLE", "Pickup check-in is awaiting backend support."));
-  return fixtures.completePickup(...args);
-};
+export const updateDeposit: typeof fixtures.updateDeposit = (id, participantId, status, userId) =>
+  isDemo ? fixtures.updateDeposit(id, participantId, status, userId) : live.updateDeposit(id, participantId, status);
+export const completePickup: typeof fixtures.completePickup = (id, participantId, userId) =>
+  isDemo ? fixtures.completePickup(id, participantId, userId) : live.completePickup(id, participantId);
+export const getChat = (id: string) => (isDemo ? Promise.reject(new ApiError(501, "UNAVAILABLE", "Chat is available when the site is using the API.")) : live.getChat(id));
+export const postChat = (id: string, body: string) => (isDemo ? Promise.reject(new ApiError(501, "UNAVAILABLE", "Chat is available when the site is using the API.")) : live.postChat(id, body));

@@ -139,8 +139,33 @@ const routes: FastifyPluginAsync = async (app) => {
           include: participantInclude,
         });
         const committed = committedLbsX100(await tx.groupBuyParticipant.findMany({ where: { groupBuyId: groupBuy.id }, select: { requestedLbsX100: true } }));
-        const status = committed >= groupBuy.targetLbsX100 ? "matched" : "funding";
-        const changed = await tx.groupBuy.updateMany({ where: { id: groupBuy.id, status: { in: ACCEPTING }, joinDeadline: { gt: new Date() } }, data: { status } });
+        const reached = committed >= groupBuy.targetLbsX100;
+        const status = reached ? "matched" : "funding";
+        let selectedBidId: string | undefined;
+        if (reached && groupBuy.priceCentsPerLb != null && !groupBuy.selectedBidId) {
+          const bid = await tx.bid.create({
+            data: {
+              groupBuyId: groupBuy.id,
+              producerId: groupBuy.createdById,
+              priceCentsPerLb: groupBuy.priceCentsPerLb,
+              availableLbsX100: Math.max(groupBuy.targetLbsX100, committed),
+              availabilityWindowStart: groupBuy.pickupWindowStart,
+              availabilityWindowEnd: groupBuy.pickupWindowEnd,
+              status: "selected",
+            },
+          });
+          selectedBidId = bid.id;
+          await recordEvent(tx, {
+            groupBuyId: groupBuy.id,
+            actorUserId: user.id,
+            eventType: "bid.selected",
+            payload: { bidId: bid.id },
+          });
+        }
+        const changed = await tx.groupBuy.updateMany({
+          where: { id: groupBuy.id, status: { in: ACCEPTING }, joinDeadline: { gt: new Date() } },
+          data: { status, ...(selectedBidId ? { selectedBidId } : {}) },
+        });
         if (!changed.count) throw conflict("This drop has closed; refresh and retry");
         if (status !== groupBuy.status) await recordEvent(tx, {
           groupBuyId: groupBuy.id, actorUserId: user.id, eventType: "group_buy.status_changed",

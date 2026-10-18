@@ -26,44 +26,30 @@ afterAll(async () => {
   await app.close();
 });
 
+const drop = {
+  produceType: "apples",
+  targetLbs: "50.00",
+  pricePerLbUsd: "1.85",
+  pickupLocationId: "ballard-commons",
+  joinDeadline: hoursFromNow(24),
+  pickupWindowStart: hoursFromNow(72),
+  pickupWindowEnd: hoursFromNow(74),
+};
+
 async function matchedBuy() {
-  const created = await call("POST", "/group-buys", owner, {
-    produceType: "apples",
-    targetLbs: "50",
-    pickupLocationId: "ballard-commons",
-    joinDeadline: hoursFromNow(24),
-    bidDeadline: hoursFromNow(48),
-    pickupWindowStart: hoursFromNow(72),
-    pickupWindowEnd: hoursFromNow(74),
-  });
+  const created = await call("POST", "/group-buys", farmer, drop);
   expect(created.statusCode, created.body).toBe(201);
   const id = created.json().groupBuy.id as string;
-  expect((await call("POST", `/group-buys/${id}/participants`, joiner, { requestedLbs: "50" })).statusCode).toBe(201);
-  const bid = await call("POST", `/group-buys/${id}/bids`, farmer, {
-    pricePerLbUsd: "1.85",
-    availableLbs: "100",
-    availabilityWindowStart: hoursFromNow(70),
-    availabilityWindowEnd: hoursFromNow(80),
-  });
-  expect(bid.statusCode, bid.body).toBe(201);
-  const selected = await call("POST", `/group-buys/${id}/select-bid`, owner, { bidId: bid.json().bid.id });
-  expect(selected.statusCode, selected.body).toBe(200);
+  expect((await call("POST", `/group-buys/${id}/participants`, owner, { requestedLbs: "20.00" })).statusCode).toBe(201);
+  expect((await call("POST", `/group-buys/${id}/participants`, joiner, { requestedLbs: "30.00" })).statusCode).toBe(201);
   return id;
 }
 
 describe("website chat and pickup texts", () => {
   it("keeps the chat closed until a farmer is selected, then lets customers and that farmer talk", async () => {
-    const created = await call("POST", "/group-buys", owner, {
-      produceType: "apples",
-      targetLbs: "50",
-      pickupLocationId: "ballard-commons",
-      joinDeadline: hoursFromNow(24),
-      bidDeadline: hoursFromNow(48),
-      pickupWindowStart: hoursFromNow(72),
-      pickupWindowEnd: hoursFromNow(74),
-    });
+    const created = await call("POST", "/group-buys", farmer, drop);
     const id = created.json().groupBuy.id as string;
-    const closed = await call("POST", `/group-buys/${id}/messages`, owner, { body: "Hello" });
+    const closed = await call("POST", `/group-buys/${id}/messages`, farmer, { body: "Hello" });
     expect(closed.statusCode).toBe(409);
 
     const groupBuyId = await matchedBuy();
@@ -75,7 +61,7 @@ describe("website chat and pickup texts", () => {
     const fromFarmer = await call("POST", `/group-buys/${groupBuyId}/messages`, farmer, { body: "Yes, I'll be there." });
     expect(fromFarmer.statusCode).toBe(201);
 
-    const chat = (await call("GET", `/group-buys/${groupBuyId}/messages`, owner)).json().chat;
+    const chat = (await call("GET", `/group-buys/${groupBuyId}/messages`, farmer)).json().chat;
     expect(chat.open).toBe(true);
     expect(chat.farmerName).toBe("Farmer");
     expect(chat.messages.map((message: { body: string }) => message.body)).toEqual([
@@ -97,9 +83,10 @@ describe("website chat and pickup texts", () => {
     expect(texts.find((row) => row.userId === joiner.user.id)?.status).toBe("skipped_no_phone");
     expect(texts.some((row) => row.userId === farmer.user.id)).toBe(false);
 
-    const again = (await call("GET", `/group-buys/${id}/messages`, owner)).json().chat;
-    expect(again.myText.status).toBe("not_configured");
-    expect(again.textSummary).toEqual({ sent: 0, skippedNoPhone: 1, notConfigured: 1, failed: 0 });
+    const farmerChat = (await call("GET", `/group-buys/${id}/messages`, farmer)).json().chat;
+    const buyerChat = (await call("GET", `/group-buys/${id}/messages`, owner)).json().chat;
+    expect(buyerChat.myText.status).toBe("not_configured");
+    expect(farmerChat.textSummary).toEqual({ sent: 0, skippedNoPhone: 1, notConfigured: 1, failed: 0 });
     expect(await prisma.pickupText.count({ where: { groupBuyId: id } })).toBe(2);
     const events = ready.json().groupBuy.events as Array<{ eventType: string; payload: Record<string, unknown> }>;
     expect(events.at(-1)).toMatchObject({

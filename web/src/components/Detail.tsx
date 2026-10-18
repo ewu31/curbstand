@@ -2,7 +2,7 @@ import { Seller, Countdown } from "./DropExtras";
 import GroceryPrices from "./GroceryPrices";
 import { useEffect, useState } from "react";
 import { actionError } from "../lib/api-error";
-import { getGroupBuy, updateStatus, updateDeposit, completePickup, isDemo } from "../lib/data";
+import { completePickup, getChat, getGroupBuy, isDemo, postChat, updateDeposit, updateStatus } from "../lib/data";
 import {
   barWidth,
   dateTime,
@@ -27,6 +27,8 @@ export default function Detail({ id, catalog, session }: { id: string; catalog: 
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [chat, setChat] = useState<Awaited<ReturnType<typeof getChat>> | null>(null);
+  const [draft, setDraft] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -43,7 +45,19 @@ export default function Detail({ id, catalog, session }: { id: string; catalog: 
 
   useEffect(() => {
     setGroupBuy(null);
+    setChat(null);
   }, [id]);
+
+  useEffect(() => {
+    if (!session || isDemo) return;
+    let active = true;
+    const load = () => {
+      getChat(id).then((next) => { if (active) setChat(next); }).catch(() => { if (active) setChat(null); });
+    };
+    load();
+    const timer = window.setInterval(load, 4000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [id, session, attempt]);
 
   async function run(work: () => Promise<unknown>) {
     setBusy(true);
@@ -137,20 +151,43 @@ export default function Detail({ id, catalog, session }: { id: string; catalog: 
                   {person.userId === session?.id ? "You" : "Participant"} · {formatQty(person.requestedLbs)} lb
                   <span>Deposit intent · {usd(person.depositAmount)} · {depositLabel(person.depositStatus)}</span>
                   <span>Pickup: {person.completionStatus === "completed" ? "Completed" : "Pending"}</span>
-                  {isOwner && isDemo && person.depositStatus === "pending" ? <button className="text-button" disabled={busy} onClick={() => void run(() => updateDeposit(id, person.id, "confirmed_manual", session?.id ?? null))}>Confirm deposit manually</button> : null}
-                  {isOwner && isDemo && person.depositStatus === "confirmed_manual" ? <div className="actions">
+                  {isOwner && person.depositStatus === "pending" ? <button className="text-button" disabled={busy} onClick={() => void run(() => updateDeposit(id, person.id, "confirmed_manual", session?.id ?? null))}>Confirm deposit manually</button> : null}
+                  {isOwner && person.depositStatus === "confirmed_manual" ? <div className="actions">
                     <button className="text-button" disabled={busy} onClick={() => void run(() => updateDeposit(id, person.id, "refunded_manual", session?.id ?? null))}>Mark refunded</button>
                     <button className="text-button" disabled={busy} onClick={() => void run(() => updateDeposit(id, person.id, "forfeited_manual", session?.id ?? null))}>Mark forfeited</button>
                   </div> : null}
-                  {isDemo && groupBuy.status === "ready_for_pickup" && person.completionStatus === "pending" && (person.userId === session?.id || isSelectedProducer) ? <button className="button secondary" disabled={busy} onClick={() => void run(() => completePickup(id, person.id, session?.id ?? null))}>Confirm manual pickup</button> : null}
+                  {groupBuy.status === "ready_for_pickup" && person.completionStatus === "pending" && (person.userId === session?.id || isSelectedProducer) ? <button className="button secondary" disabled={busy} onClick={() => void run(() => completePickup(id, person.id, session?.id ?? null))}>Confirm manual pickup</button> : null}
                 </li>
               ))}
             </ul>
           )}
           <p className="hint">Deposits are manual records. No money is collected or moved.</p>
-          {!isDemo ? <p className="hint">Deposit updates and pickup check-in are awaiting backend support.</p> : null}
-          {groupBuy.status === "ready_for_pickup" ? <p className="hint">QR check-in is unavailable. {isDemo ? "Use manual pickup confirmation at handoff." : "Contact the organizer to record your pickup."}</p> : null}
+          {groupBuy.status === "ready_for_pickup" ? <p className="hint">Use manual pickup confirmation at handoff.</p> : null}
         </section>
+
+        {session && chat ? (
+          <section className="section">
+            <h2>Chat with the farm</h2>
+            <p className="hint">{chat.farmName || chat.farmerName || "The farmer"}{chat.open ? "" : " · Chat opens after the minimum is reached."}</p>
+            {chat.myText ? <p className="hint">Your pickup text: {chat.myText.status.replaceAll("_", " ")}.</p> : null}
+            <ul className="chat-log">
+              {chat.messages.map((message) => (
+                <li key={message.id}><strong>{message.authorUserId === session.id ? "You" : message.authorName}</strong> {message.body}</li>
+              ))}
+            </ul>
+            {chat.open ? (
+              <form className="chat-form" onSubmit={(event) => {
+                event.preventDefault();
+                const body = draft.trim();
+                if (!body) return;
+                void run(async () => { await postChat(id, body); setDraft(""); });
+              }}>
+                <input aria-label="Message" maxLength={1000} value={draft} onChange={(event) => setDraft(event.target.value)} />
+                <button className="button" type="submit" disabled={busy}>Send</button>
+              </form>
+            ) : null}
+          </section>
+        ) : null}
 
         <section className="section">
           <h2>Activity</h2>

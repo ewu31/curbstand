@@ -253,6 +253,10 @@ a { color: inherit; }
 }
 
 .people li span, .activity li span { display: block; color: var(--muted); font-size: 13px; }
+.chat-log { max-height: 280px; overflow: auto; list-style: none; margin: 0 0 12px; padding: 0; }
+.chat-log li { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.chat-form { display: flex; gap: 8px; }
+.chat-form input { flex: 1; border: 1px solid var(--field); border-radius: 8px; padding: 8px 10px; }
 
 .form-panel {
   max-width: 440px;

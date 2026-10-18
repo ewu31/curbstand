@@ -38,8 +38,10 @@ localhost. Set a strong `JWT_SECRET`, production environment, and explicit
 `CORS_ORIGINS` for a production deployment. Images contain neither local `.env`
 files nor databases. Migrations and reference catalog setup run on startup; demo account seeding is explicit.
 
-Live deposits are simulated intents. Deposit updates and pickup check-in still
-await backend endpoints; their controls remain available only in fixture mode.
+Live deposits are simulated intents. The website records them and manual
+check-in through the API. Chat with the farmer opens after a fixed-price drop
+reaches its minimum, which selects that farmer and later queues the Photon
+pickup text.
 
 ## Stack
 

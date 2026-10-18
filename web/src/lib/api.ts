@@ -44,10 +44,16 @@ export async function listGroupBuys(filters: { produceType?: string; locationId?
   const { groupBuys } = await request<Wire.ListGroupBuysResponse>(`/group-buys?${params}`);
   return groupBuys.map(row => summary(row));
 }
+function bid(row: Wire.BidDto): Bid {
+  return {
+    id: row.id, groupBuyId: row.groupBuyId, producerId: row.producerId, pricePerLb: Number(row.pricePerLbUsd),
+    availableLbs: Number(row.availableLbs), availabilityWindowStart: row.availabilityWindowStart,
+    availabilityWindowEnd: row.availabilityWindowEnd, notes: row.notes, status: row.status, createdAt: row.createdAt,
+  };
+}
 export async function getGroupBuy(id: string): Promise<GroupBuyDetail> {
   const { groupBuy } = await request<Wire.GroupBuyResponse>(`/group-buys/${id}`);
-  const bids: Bid[] = [];
-  return { ...summary(groupBuy), participants: groupBuy.participants.map(participant), bids, events: groupBuy.events };
+  return { ...summary(groupBuy), participants: groupBuy.participants.map(participant), bids: groupBuy.selectedBid ? [bid(groupBuy.selectedBid)] : [], events: groupBuy.events };
 }
 export async function createGroupBuy(input: CreateGroupBuyInput, _userId: string | null): Promise<GroupBuySummary> {
   const { groupBuy } = await request<Wire.GroupBuyResponse>("/group-buys", post({ ...input, targetLbs: input.targetLbs.toFixed(2), pricePerLbUsd: input.pricePerLb.toFixed(2) }));
@@ -75,6 +81,23 @@ function summaryFromDetail(detail: GroupBuyDetail): GroupBuySummary {
   const active = detail.bids.filter(b => b.status === "submitted" || b.status === "selected");
   return { ...detail, lowestBidPerLb: active.length ? Math.min(...active.map(b => b.pricePerLb)) : null };
 }
+
+export async function updateDeposit(id: string, participantId: string, status: Participant["depositStatus"]) {
+  await request(`/group-buys/${id}/participants/${participantId}/deposit`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+export async function completePickup(id: string, participantId: string) {
+  await request(`/group-buys/${id}/check-in`, post({ participantId, method: "manual" }));
+}
+export type FarmChat = {
+  open: boolean;
+  farmerName: string | null;
+  farmName: string | null;
+  messages: { id: string; authorUserId: string; authorName: string; body: string; createdAt: string }[];
+  myText: { status: string; detail: string | null } | null;
+  textSummary: { sent: number; skippedNoPhone: number; notConfigured: number; failed: number } | null;
+};
+export const getChat = (id: string) => request<{ chat: FarmChat }>(`/group-buys/${id}/messages`).then((body) => body.chat);
+export const postChat = (id: string, body: string) => request(`/group-buys/${id}/messages`, post({ body }));
 
 export const getProfile = () => request<Wire.MeResponse>("/me");
 export const updateProfile = (producerType: "at_home" | "local_farmer" | "large_scale_farmer") => request<Wire.MeResponse>("/me", { method: "PATCH", body: JSON.stringify({ producerType }) });

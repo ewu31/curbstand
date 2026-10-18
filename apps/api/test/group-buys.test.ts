@@ -27,6 +27,7 @@ it("confirms the scheduled date exactly when commitments reach the minimum", asy
  expect((await call("POST", `${url}/participants`, other, { requestedLbs: "29.75" })).statusCode).toBe(201);
  const confirmed = (await call("GET", url, buyer)).json().groupBuy;
  expect(confirmed).toMatchObject({ status: "matched", committedLbs: "50.00", pricePerLbUsd: "1.85", pickupWindowStart: drop.pickupWindowStart });
+ expect(confirmed.selectedBidId).toEqual(expect.any(String));
  expect(confirmed.events.filter((e: { payload: { to?: string } }) => e.payload.to === "matched")).toHaveLength(1);
  expect((await call("POST", `${url}/participants`, operator, { requestedLbs: "1" })).statusCode).toBe(409);
  expect((await call("PATCH", `${url}/status`, otherSeller, { status: "ready_for_pickup" })).statusCode).toBe(403);
