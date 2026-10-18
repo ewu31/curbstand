@@ -4,9 +4,11 @@ WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/shared/package.json packages/shared/package.json
+COPY packages/fulfillment/package.json packages/fulfillment/package.json
 COPY apps/api/prisma apps/api/prisma
 RUN npm ci
 COPY packages/shared packages/shared
+COPY packages/fulfillment packages/fulfillment
 COPY apps/api apps/api
 COPY tsconfig.base.json ./
 RUN mkdir -p /data && chown node:node /data
