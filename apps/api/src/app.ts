@@ -81,10 +81,59 @@ function serializeGroupBuy(groupBuy: typeof schema.groupBuys.$inferSelect, commi
   };
 }
 
+function isLocalOrigin(origin: string) {
+  try {
+    const url = new URL(origin);
+    return url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+  } catch {
+    return false;
+  }
+}
+
+async function lowestBidPerLb(db: Database, groupBuyId: string) {
+  const [result] = await db
+    .select({ price: sql<string | null>`min(${schema.bids.pricePerLb})` })
+    .from(schema.bids)
+    .where(and(
+      eq(schema.bids.groupBuyId, groupBuyId),
+      or(eq(schema.bids.status, "submitted"), eq(schema.bids.status, "selected")),
+    ));
+  return result?.price == null ? null : decimal(result.price);
+}
+
 export function createApp(db: Database) {
   const app = new Hono();
 
+  app.use("*", async (c, next) => {
+    const origin = c.req.header("origin");
+    if (origin && isLocalOrigin(origin)) {
+      c.header("Access-Control-Allow-Origin", origin);
+      c.header("Vary", "Origin");
+      c.header("Access-Control-Allow-Headers", "Content-Type, x-user-id");
+      c.header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
+    }
+    if (c.req.method === "OPTIONS") return c.body(null, 204);
+    await next();
+  });
+
   app.get("/health", (c) => c.json({ data: { status: "ok" } }));
+
+  app.get("/produce", async (c) => {
+    const rows = await db.select({
+      slug: schema.produceCatalog.slug,
+      displayName: schema.produceCatalog.displayName,
+    }).from(schema.produceCatalog)
+      .where(eq(schema.produceCatalog.active, true))
+      .orderBy(asc(schema.produceCatalog.displayName));
+    return c.json({ data: rows });
+  });
+
+  app.get("/pickup-locations", async (c) => {
+    const rows = await db.select().from(schema.pickupLocations)
+      .where(eq(schema.pickupLocations.active, true))
+      .orderBy(asc(schema.pickupLocations.name));
+    return c.json({ data: rows });
+  });
 
   async function currentUser(c: any): Promise<AuthUser | Response> {
     const userId = c.req.header("x-user-id");
@@ -113,8 +162,10 @@ export function createApp(db: Database) {
       .innerJoin(schema.pickupLocations, eq(schema.groupBuys.pickupLocationId, schema.pickupLocations.id))
       .where(and(...filters))
       .orderBy(asc(schema.groupBuys.pickupWindowStart));
-    const data = await Promise.all(rows.map(async ({ groupBuy, location }) =>
-      serializeGroupBuy(groupBuy, await committedQuantity(db, groupBuy.id), location)));
+    const data = await Promise.all(rows.map(async ({ groupBuy, location }) => ({
+      ...serializeGroupBuy(groupBuy, await committedQuantity(db, groupBuy.id), location),
+      lowestBidPerLb: await lowestBidPerLb(db, groupBuy.id),
+    })));
     return c.json({ data });
   });
 

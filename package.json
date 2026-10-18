@@ -8,6 +8,14 @@
     "packages/*"
   ],
   "scripts": {
+    "astro": "npm run astro --prefix web --",
+    "dev": "npm run dev --prefix web",
+    "stop:web": "npm run astro --prefix web -- dev stop",
+    "dev:web": "npm run dev --prefix web",
+    "demo:web": "npm run demo --prefix web",
+    "build:web": "npm run build --prefix web",
+    "check:web": "npm run check --prefix web",
+    "test:web": "npm test --prefix web",
     "build": "npm run build --workspace @curbstand/db && npm run build --workspace @curbstand/api",
     "typecheck": "npm run build --workspace @curbstand/db && npm run typecheck --workspace @curbstand/api",
     "db:generate": "npm run db:generate --workspace @curbstand/db",
