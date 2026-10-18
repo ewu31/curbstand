@@ -82,7 +82,10 @@ model GroupBuyParticipant {
   depositAmount  String
   depositStatus  String   @default("pending")
   completionStatus String @default("pending")
+  completionMethod String?
   completedAt    DateTime?
+  checkInTokenHash String?
+  checkInToken   CheckInToken?
   groupBuy       GroupBuy @relation(fields: [groupBuyId], references: [id], onDelete: Cascade)
   user           User     @relation(fields: [userId], references: [id])
   createdAt      DateTime @default(now())
@@ -107,6 +110,42 @@ model Bid {
   createdAt                DateTime @default(now())
 
   @@index([groupBuyId, pricePerLb])
+}
+
+model CheckInToken {
+  participantId String               @id
+  token         String
+  createdAt     DateTime             @default(now())
+  participant   GroupBuyParticipant  @relation(fields: [participantId], references: [id], onDelete: Cascade)
+}
+
+model PriceBenchmark {
+  id            String   @id
+  produceType   String
+  region        String
+  currency      String   @default("USD")
+  unit          String   @default("lb")
+  retailLow     String
+  retailHigh    String
+  source        String
+  model         String
+  promptVersion String
+  promptHash    String
+  responseJson  String
+  retrievedAt   DateTime
+  expiresAt     DateTime
+
+  @@index([produceType, region, retrievedAt])
+}
+
+model DistributionCenterBaseline {
+  produceType    String
+  region         String
+  currency       String   @default("USD")
+  baselinePerLb  String
+  updatedAt      DateTime
+
+  @@id([produceType, region])
 }
 
 model Event {

@@ -1,6 +1,8 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import { Prisma, PrismaClient } from "@curbstand/db";
+import type { Actor } from "../../../packages/fulfillment/src/types.ts";
+import { createFulfillmentServices, issueReadyCheckInTokens, refundDepositsForCancel, registerFulfillmentRoutes } from "./fulfillment-routes.js";
 
 const dateSchema = z.string().datetime({ offset: true });
 const positiveDecimal = z.number().finite().positive();
@@ -106,6 +108,7 @@ async function committedQuantity(db: PrismaClient, groupBuyId: string) {
 
 export function createApp(db: PrismaClient): FastifyInstance {
   const app = Fastify({ logger: true });
+  const fulfillment = createFulfillmentServices(db);
 
   async function currentUser(request: FastifyRequest, reply: FastifyReply): Promise<User | null> {
     const userId = request.headers["x-user-id"];
@@ -131,7 +134,24 @@ export function createApp(db: PrismaClient): FastifyInstance {
     return user;
   }
 
+  async function actorFrom(request: FastifyRequest, reply: FastifyReply): Promise<Actor | null> {
+    const user = await currentUser(request, reply);
+    if (!user) return null;
+    if (user.role !== "customer" && user.role !== "producer" && user.role !== "operator") {
+      sendError(reply, 403, "FORBIDDEN", "Role is not recognized");
+      return null;
+    }
+    return { userId: user.id, role: user.role };
+  }
+
   app.get("/health", async () => ({ data: { status: "ok" } }));
+
+  app.get("/dev/actors", async () => ({
+    data: await db.user.findMany({
+      select: { id: true, name: true, role: true },
+      orderBy: { name: "asc" },
+    }),
+  }));
 
   app.get<{ Querystring: { produceType?: string; locationId?: string } }>(
     "/group-buys",
@@ -340,12 +360,25 @@ export function createApp(db: PrismaClient): FastifyInstance {
     const canCancel = requested === "cancelled" && (user.role === "operator" || (user.id === groupBuy.createdBy && ["open", "funding"].includes(groupBuy.status)));
     const canReady = requested === "ready_for_pickup" && user.role === "producer" && groupBuy.status === "matched";
     if (!canCancel && !canReady) return sendError(reply, 403, "FORBIDDEN", "User cannot make this status change");
+    if (requested === "cancelled" && ["open", "funding", "matched"].includes(groupBuy.status)) {
+      const actor = user.role === "operator" || user.role === "customer" || user.role === "producer"
+        ? { userId: user.id, role: user.role as Actor["role"] }
+        : null;
+      if (!actor) return sendError(reply, 403, "FORBIDDEN", "Role is not recognized");
+      const result = await refundDepositsForCancel(fulfillment, actor, groupBuy.id);
+      return { data: result };
+    }
     await db.$transaction([
       db.groupBuy.update({ where: { id: groupBuy.id }, data: { status: requested } }),
       db.event.create({ data: { groupBuyId: groupBuy.id, actorUserId: user.id, eventType: `group_buy_${requested}`, payload: JSON.stringify({ from: groupBuy.status, to: requested }) } }),
     ]);
+    if (requested === "ready_for_pickup") {
+      await issueReadyCheckInTokens(fulfillment, groupBuy.id, groupBuy.createdBy);
+    }
     return { data: { id: groupBuy.id, status: requested } };
   });
+
+  registerFulfillmentRoutes(app, fulfillment, actorFrom);
 
   app.post("/jobs/resolve-group-buys", async (request, reply) => {
     const user = await requireRole(request, reply, "operator");

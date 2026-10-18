@@ -1,52 +1,72 @@
 # Curbstand
 
-Curbstand is a Seattle / Puget Sound group-buy platform connecting customers
-with local producers at approved public pickup locations.
+Curbstand is a Seattle / Puget Sound group-buy platform connecting customers with local producers at approved public pickup locations.
 
-## Backend development
+## Backend
 
 The backend uses a TypeScript workspace, Fastify API, Prisma ORM, and SQLite.
 
 ### Setup
 
 1. Copy `.env.example` to `.env`. The default database is a local SQLite file.
-3. Install dependencies:
+2. Install dependencies:
 
    ```sh
    npm install
    ```
 
-4. Apply the schema and seed the controlled produce catalog and approved pickup
-   locations:
+3. Apply the schema and seed the catalog, pickup locations, demo users, and a ready-for-pickup tomato group buy:
 
    ```sh
    npm run db:migrate
    npm run db:seed
    ```
 
-5. Start the API:
+4. Start the API:
 
    ```sh
    npm start
    ```
 
-The API listens on `http://localhost:8787` by default.
+The API listens on `http://localhost:8787`. Send an existing user id in the `x-user-id` header. That header is a development seam, not production authentication.
 
-## Current API authentication
+`GET /dev/actors` lists seeded users so the fulfillment screen can switch actors. It does not return password hashes.
 
-The group-buy backend currently expects an existing user's UUID in the
-`x-user-id` header. This is an explicit development seam for the authentication
-foundation task; it is not a production authentication mechanism.
+## Fulfillment widget
 
-## Scheduling and resolution
+`packages/fulfillment` is the deposit, check-in, event, and supermarket comparison UI. It calls the API through a dev-server proxy.
 
-Group buys store join, bid, and pickup windows as timezone-aware timestamps.
-The `POST /jobs/resolve-group-buys` operator endpoint is intended to be called
-by a scheduler. It cancels open/funding group buys whose relevant deadline has
-passed and records an event for each resolution. It is safe to call repeatedly:
-only still-open candidates are updated.
+```sh
+npm run dev --workspace @curbstand/fulfillment
+```
 
-## API routes
+Open `http://localhost:5173` after the API and seed have been run.
+
+Deposit changes, QR check-in, manual check-in, completion, cancellation refunds, and price benchmarks are stored in the same SQLite database as the group buys. Check-in codes are stored as hashes on the participant, with the display token in `CheckInToken`. Price estimates are cached in `PriceBenchmark`. Without `GEMINI_API_KEY`, estimates are labeled demo samples. If Gemini fails or the feature flag is off, the group-buy flow still works and supermarket prices are hidden.
+
+### Environment
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | SQLite file. The client resolves `file:./curbstand.db` to `packages/db/curbstand.db`. |
+| `API_PORT` | API port. Default `8787`. |
+| `DEPOSIT_AMOUNT_USD` | Flat deposit intent recorded when a customer joins. Default `10` in code, `5.00` in the example env. |
+| `PRICE_COMPARISON_ENABLED` | Set to `false` to hide the comparison endpoint's estimate. |
+| `GEMINI_API_KEY` | Optional live supermarket estimate. The key stays on the server. |
+| `GEMINI_MODEL` | Optional. Defaults to `gemini-2.5-flash`. |
+
+### Task 4 routes
+
+- `PATCH /group-buys/:id/participants/:participantId/deposit`
+- `GET /group-buys/:id/participants/:participantId/check-in-token`
+- `POST /group-buys/:id/check-in`
+- `POST /group-buys/:id/complete`
+- `POST /group-buys/:id/cancel`
+- `GET /price-benchmarks?produceType=&region=`
+
+`PATCH /group-buys/:id/status` still performs the group-buy status change. Cancelling an open, funding, or matched buy also marks confirmed deposits `refunded_manual`. Moving a matched buy to `ready_for_pickup` issues check-in codes.
+
+## Other API routes
 
 - `GET /health`
 - `GET /group-buys?produceType=&locationId=`
@@ -59,7 +79,4 @@ only still-open candidates are updated.
 - `POST /group-buys/:id/select-bid`
 - `POST /jobs/resolve-group-buys`
 
-All money and quantity values are stored as fixed two-decimal strings in SQLite
-and serialized with explicit units in API responses. Prisma's SQLite connector
-does not provide PostgreSQL-style decimal or enum columns, so the API validates
-these values and stores the corresponding status strings at the boundary.
+Money and quantity values are stored as fixed two-decimal strings. The API validates them and serializes units in responses.
