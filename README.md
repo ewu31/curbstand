@@ -26,12 +26,12 @@ apps/web          @curbstand/web    — frontend (Task 2)
 ```sh
 npm install          # also runs `prisma generate`
 npm run db:setup     # creates apps/api/.env from .env.example, applies migrations, seeds
-npm run dev          # API on http://127.0.0.1:3000 (watch mode)
+npm run dev          # API on http://127.0.0.1:8787 (watch mode); `npm start` without watch
 npm test             # all workspaces
 npm run typecheck
 ```
 
-`npm run db:reset` drops and recreates the dev database, then reseeds.
+`npm run db:seed` reseeds (idempotent). `npm run db:reset` drops and recreates the dev database, then reseeds.
 
 ### Environment (`apps/api/.env`)
 
@@ -40,7 +40,7 @@ npm run typecheck
 | `DATABASE_URL` | `file:./dev.db` | Relative to `apps/api/prisma/` |
 | `JWT_SECRET` | dev fallback | Required when `NODE_ENV=production` |
 | `JWT_EXPIRES_IN` | `7d` | |
-| `PORT` / `HOST` | `3000` / `127.0.0.1` | |
+| `PORT` / `HOST` | `8787` / `127.0.0.1` | |
 | `DEPOSIT_AMOUNT_USD` | `5.00` | Fixed simulated deposit per participation (`config.depositAmountCents`) |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated |
 
@@ -108,6 +108,33 @@ strings; validate with these lists (`isOneOf`, `z.enum(...)`).
 **Location matching.** Producers have `farmLatitude`/`farmLongitude` and
 `serviceRadiusMiles`; use `distanceMiles()` against the pickup location.
 
+## Group-buy API (Task 3)
+
+| Route | Auth | Notes |
+| --- | --- | --- |
+| `GET /group-buys?produceType=&locationId=&status=` | — | `{ groupBuys }`; defaults to in-progress statuses, sorted by pickup start |
+| `POST /group-buys` | customer | 201 `{ groupBuy }`; `createGroupBuySchema` |
+| `GET /group-buys/:id` | any | `{ groupBuy }` (`GroupBuyDetail`, including `myParticipation` and `events`) |
+| `POST /group-buys/:id/participants` | customer | 201 `{ participant }`; first join moves `open → funding`; records a `pending` deposit intent |
+| `POST /group-buys/:id/bids` | producer | 201 `{ bid }`; open/funding only, before `bidDeadline`; availability must cover the pickup window |
+| `GET /group-buys/:id/bids` | — | `{ bids }`, cheapest first |
+| `POST /group-buys/:id/select-bid` | owner | `{ groupBuy }`; requires `funding`, committed ≥ target, before `bidDeadline`; matches once |
+| `PATCH /group-buys/:id/status` | see notes | `{ groupBuy }`. `cancelled`: owner while open/funding, or an operator. `ready_for_pickup`: the selected bid's producer, while matched |
+| `POST /jobs/resolve-group-buys` | operator | `{ resolvedGroupBuyIds, resolvedAt }` |
+
+Conflict codes (409): `GROUP_BUY_CLOSED`, `DEADLINE_PASSED`, `ALREADY_JOINED`,
+`QUANTITY_UNAVAILABLE`, `THRESHOLD_NOT_MET`, `ALREADY_MATCHED`,
+`INVALID_TRANSITION`.
+
+### Scheduling and resolution
+
+Join, bid, and pickup windows are stored as UTC timestamps. A scheduler is meant
+to call `POST /jobs/resolve-group-buys` (as an operator). It cancels `open`
+group buys past their join deadline and `funding` group buys past their bid
+deadline, recording a `group_buy.cancelled` event with
+`reason: "deadline_expired"` for each one. It is safe to call repeatedly,
+because only rows that are still eligible are changed.
+
 ## Group-buy contract (Tasks 2–4)
 
 Request schemas and response types live in
@@ -115,7 +142,7 @@ Request schemas and response types live in
 redefining shapes.
 
 - **Requests:** `listGroupBuysQuerySchema`, `createGroupBuySchema` (also checks
-  `joinDeadline ≤ bidDeadline ≤ pickupWindowStart < pickupWindowEnd`),
+  `joinDeadline < bidDeadline ≤ pickupWindowStart < pickupWindowEnd`),
   `joinGroupBuySchema`, `updateGroupBuyStatusSchema`, `createBidSchema`,
   `selectBidSchema`. Parsing converts to storage units: cents, lbs×100, `Date`.
   Checks that depend on the clock ("deadline not passed") and on DB state are
@@ -137,6 +164,9 @@ redefining shapes.
   `bidInclude`, `toParticipant` + `participantInclude`, `toEvent`,
   `toDepositSummary`, `committedLbsX100`. An unknown status string in the DB
   throws instead of being passed through.
+- **Events:** write them with `recordEvent(tx, { groupBuyId, actorUserId, eventType, payload })`
+  (`apps/api/src/lib/events.ts`). The payload holds ids, statuses, quantities and
+  reasons only, never contact details or secrets.
 
 ## Adding routes (Tasks 3 and 4)
 

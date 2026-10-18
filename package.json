@@ -14,6 +14,9 @@
     "db:setup": "npm run db:setup -w @curbstand/api",
     "db:reset": "npm run db:reset -w @curbstand/api",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "start": "npm run start -w @curbstand/api",
+    "db:migrate": "npm run db:migrate -w @curbstand/api",
+    "db:seed": "npm run db:seed -w @curbstand/api"
   }
 }

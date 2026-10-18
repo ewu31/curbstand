@@ -11,7 +11,7 @@ const DEV_JWT_SECRET = "dev-insecure-secret-do-not-use-in-production";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  PORT: z.coerce.number().int().default(3000),
+  PORT: z.coerce.number().int().default(8787),
   HOST: z.string().default("127.0.0.1"),
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(16).optional(),

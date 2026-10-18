@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "postinstall": "prisma generate",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "db:seed": "prisma db seed"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

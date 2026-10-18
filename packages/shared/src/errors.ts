@@ -11,6 +11,12 @@ export const ERROR_CODES = {
   EMAIL_TAKEN: 409,
   INVALID_TRANSITION: 409,
   DEADLINE_PASSED: 409,
+  /** Group buy is not in a status that accepts this action (e.g. joining a matched group buy). */
+  GROUP_BUY_CLOSED: 409,
+  ALREADY_JOINED: 409,
+  ALREADY_MATCHED: 409,
+  THRESHOLD_NOT_MET: 409,
+  QUANTITY_UNAVAILABLE: 409,
   INTERNAL_ERROR: 500,
 } as const;
 

@@ -31,7 +31,7 @@ export const listGroupBuysQuerySchema = z.object({
 
 /**
  * POST /group-buys. Schedule must satisfy:
- *   joinDeadline <= bidDeadline <= pickupWindowStart < pickupWindowEnd
+ *   joinDeadline < bidDeadline <= pickupWindowStart < pickupWindowEnd
  * "Is the deadline in the future" depends on the server clock, so it is checked by the route.
  */
 export const createGroupBuySchema = z
@@ -48,7 +48,7 @@ export const createGroupBuySchema = z
     const issue = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });
     if (v.pickupWindowEnd <= v.pickupWindowStart) issue("pickupWindowEnd", "Must be after pickupWindowStart");
     if (v.bidDeadline > v.pickupWindowStart) issue("bidDeadline", "Must be on or before pickupWindowStart");
-    if (v.joinDeadline > v.bidDeadline) issue("joinDeadline", "Must be on or before bidDeadline");
+    if (v.joinDeadline >= v.bidDeadline) issue("joinDeadline", "Must be before bidDeadline");
   });
 export type CreateGroupBuyInput = z.input<typeof createGroupBuySchema>;
 
@@ -65,7 +65,7 @@ export const updateGroupBuyStatusSchema = z.object({
 });
 export type UpdateGroupBuyStatusInput = z.input<typeof updateGroupBuyStatusSchema>;
 
-/** POST /group-buys/:id/bids */
+/** POST /group-buys/:id/bids. The availability window must also cover the pickup window (checked by the route). */
 export const createBidSchema = z
   .object({
     pricePerLbUsd: positiveUsdAmountSchema,
