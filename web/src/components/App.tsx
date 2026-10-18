@@ -78,7 +78,7 @@ export default function App({ page, groupBuyId = "", produce = "", location = ""
         {page === "profile" || page === "payments" ? ready ? <AccountPage session={session} payments={page === "payments"} /> : <p role="status">Loading</p> : null}
         {page === "following" ? ready ? <PeoplePage session={session} /> : <p role="status">Loading</p> : null}
         {showPage && page === "distributor" ? <Distributor catalog={catalog} session={session} /> : null}
-        {showPage && page === "browse" ? <Browse catalog={catalog} produce={produce} location={location} query={query} /> : null}
+        {showPage && page === "browse" ? <Browse catalog={catalog} produce={produce} location={location} query={query} session={session} /> : null}
         {showPage && page === "detail" ? <Detail id={groupBuyId} catalog={catalog} session={session} /> : null}
         {showPage && page === "purchase" ? <Purchase id={groupBuyId} catalog={catalog} session={session} /> : null}
         {showPage && page === "create" ? <CreateGroupBuy catalog={catalog} session={session} /> : null}

@@ -24,5 +24,7 @@ export function toSummary(detailRow: GroupBuyDetail): GroupBuySummary {
     createdAt: detailRow.createdAt,
     updatedAt: detailRow.updatedAt,
     lowestBidPerLb: lowestBid(detailRow.bids),
+    products: detailRow.products,
+    imageUrls: detailRow.imageUrls,
   };
 }

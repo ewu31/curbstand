@@ -50,7 +50,7 @@ export async function getGroupBuy(id: string): Promise<GroupBuyDetail> {
   return { ...summary(groupBuy), participants: groupBuy.participants.map(participant), bids, events: groupBuy.events };
 }
 export async function createGroupBuy(input: CreateGroupBuyInput, _userId: string | null): Promise<GroupBuySummary> {
-  const { groupBuy } = await request<Wire.GroupBuyResponse>("/group-buys", post({ ...input, targetLbs: input.targetLbs.toFixed(2), pricePerLbUsd: input.pricePerLb.toFixed(2) }));
+  const { groupBuy } = await request<Wire.GroupBuyResponse>("/group-buys", post({ ...input, targetLbs: input.targetLbs.toFixed(2), pricePerLbUsd: (input.pricePerLb ?? input.products?.[0]?.pricePerLb ?? 0).toFixed(2) }));
   return summary(groupBuy);
 }
 export async function joinGroupBuy(id: string, requestedLbs: number, _userId: string | null): Promise<Participant> {

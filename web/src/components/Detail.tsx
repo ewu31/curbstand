@@ -72,7 +72,7 @@ export default function Detail({ id, catalog, session }: { id: string; catalog: 
   if (!groupBuy || !catalog) return <p className="status-line">Loading</p>;
 
   const name = produceName(groupBuy.produceType, catalog.produce);
-  const photo = producePhoto(groupBuy.produceType);
+  const photo = groupBuy.imageUrls?.[0] || producePhoto(groupBuy.produceType);
   const price = groupBuy.pricePerLb ?? null;
   const mine = session?.id ? groupBuy.participants.find((person) => person.userId === session.id) : undefined;
   const isOwner = session?.id === groupBuy.createdBy;
@@ -96,6 +96,7 @@ export default function Detail({ id, catalog, session }: { id: string; catalog: 
         </section>
         <Seller seller={groupBuy.seller} expanded viewerId={session?.id ?? null} />
         <GroceryPrices produceSlug={groupBuy.produceType} />
+        {groupBuy.products && groupBuy.products.length > 1 ? <section className="drop-products"><h2>Available from this grower</h2><ul>{groupBuy.products.map((product) => <li key={product.id}>{produceName(product.produceType, catalog.produce)} · {perLb(product.pricePerLb)} · {formatQty(product.availableLbs)} lb available</li>)}</ul></section> : null}
         <section className="drop-description"><h2>About this drop</h2><p>{groupBuy.description || `Join your neighbors for a shared order of ${name.toLowerCase()} at ${placeLabel(groupBuy.pickupLocation)}. Together, the group needs ${formatQty(groupBuy.targetLbs)} lb to reach its minimum. Check the pickup window before joining.`}</p></section>
         <Countdown start={groupBuy.pickupWindowStart} end={groupBuy.pickupWindowEnd} status={groupBuy.status} />
         <p className="buy-place">{groupBuy.pickupLocation?.name} · {groupBuy.pickupLocation?.address}</p>
@@ -164,4 +165,3 @@ export default function Detail({ id, catalog, session }: { id: string; catalog: 
     </article>
   );
 }
-
