@@ -7,7 +7,7 @@ Group-buy platform for produce. See [DESIGN.md](./DESIGN.md) and
 
 | Concern | Choice |
 | --- | --- |
-| Language | TypeScript (ESM), Node `^20.19.0 \|\| >=22.12.0` (`.nvmrc`: 22), npm workspaces |
+| Language | TypeScript (ESM), Node ≥ 22.12 (`.nvmrc`: 22), npm workspaces |
 | API | Fastify 5 (`apps/api`), run with `tsx` (no build step) |
 | Database | SQLite via Prisma 6 (`apps/api/prisma/schema.prisma`) |
 | Auth | Stateless JWT bearer tokens (HS256, `jose`), bcrypt password hashes |
@@ -23,8 +23,9 @@ apps/web          @curbstand/web    — frontend (Task 2)
 
 ## Run locally
 
-Requires Node 20.19+ or 22.12+ (`nvm use` picks up `.nvmrc`). Older Node 20
-releases can't `require()` ES modules, which the Fastify test tooling needs.
+Requires Node 22.12+ (`nvm use` picks up `.nvmrc`). Fastify's test tooling
+depends on `cookie@2`, which is ESM-only and declares `node >=22`; on Node 20
+the API tests crash.
 `.npmrc` sets `engine-strict`, so `npm install` fails early on an unsupported
 version.
 
