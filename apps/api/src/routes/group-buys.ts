@@ -18,6 +18,7 @@ import {
 import type { FastifyPluginAsync } from "fastify";
 import { authUser, requireAuth, requireCustomer, requireOperator, requireProducer } from "../auth/guards";
 import { issueReadyCheckInTokens, refundDepositsForCancel, toFulfillmentActor } from "../fulfillment";
+import { ensurePickupTexts } from "../pickup-text";
 import { config } from "../config";
 import { prisma } from "../lib/db";
 import { badRequest, conflict, deadlinePassed, forbidden, HttpError, invalidTransition, notFound } from "../lib/errors";
@@ -312,7 +313,10 @@ const routes: FastifyPluginAsync = async (app) => {
         payload: { from, to, ...(reason ? { reason } : {}) },
       });
     });
-    if (to === "ready_for_pickup") await issueReadyCheckInTokens(groupBuy.id, groupBuy.createdById);
+    if (to === "ready_for_pickup") {
+      await issueReadyCheckInTokens(groupBuy.id, groupBuy.createdById);
+      await ensurePickupTexts(groupBuy.id, user.id);
+    }
     return loadDetail(groupBuy.id, user.id);
   });
 

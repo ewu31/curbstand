@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import type { PriceBenchmarkResponse } from "../benchmark/service"
 import { DEPOSIT_DISCLAIMER, DEPOSIT_STATUS_COPY, type DepositStatus, type GroupBuyStatus } from "../types"
 import { MarketComparison } from "./MarketComparison"
@@ -28,6 +28,24 @@ type Detail = {
 }
 
 type GroupBuySummary = { id: string; status: GroupBuyStatus; produceType: { id: string; name: string } }
+
+type ChatMessage = { id: string; authorUserId: string; authorName: string; body: string; createdAt: string }
+type TextSummary = { sent: number; skippedNoPhone: number; notConfigured: number; failed: number }
+type Chat = {
+  open: boolean
+  farmerName: string | null
+  farmName: string | null
+  messages: ChatMessage[]
+  myText: { status: string; detail: string | null } | null
+  textSummary: TextSummary | null
+}
+
+const TEXT_COPY: Record<string, string> = {
+  sent: "A text was sent to the phone number on your account. It says enough people joined and the farmer confirmed this pickup.",
+  skipped_no_phone: "Add a phone number to your account to get the pickup text.",
+  not_configured: "Pickup texts use Photon. This server does not have a Photon key yet, so no text was sent.",
+  failed: "Photon could not send the pickup text.",
+}
 
 const DEMO_ACCOUNTS: DemoAccount[] = [
   { email: "alice@demo.curbstand.app", name: "Alice Nguyen", role: "customer" },
@@ -81,6 +99,16 @@ function formatPacific(iso: string) {
   }).format(new Date(iso))
 }
 
+function textSummaryCopy(summary: TextSummary) {
+  const parts = [
+    summary.sent ? `${summary.sent} sent` : "",
+    summary.notConfigured ? `${summary.notConfigured} waiting for a Photon key` : "",
+    summary.skippedNoPhone ? `${summary.skippedNoPhone} with no phone number` : "",
+    summary.failed ? `${summary.failed} failed` : "",
+  ].filter(Boolean)
+  return parts.length > 0 ? `Pickup texts: ${parts.join(", ")}.` : "Pickup texts have not been sent."
+}
+
 function completionLabel(status: string) {
   if (status === "checked_in_qr") return "Checked in · qr"
   if (status === "checked_in_manual") return "Checked in · manual"
@@ -101,6 +129,11 @@ export function App() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [chat, setChat] = useState<Chat | null>(null)
+  const [chatError, setChatError] = useState<string | null>(null)
+  const [chatBusy, setChatBusy] = useState(false)
+  const [draft, setDraft] = useState("")
+  const [chatReload, setChatReload] = useState(0)
 
   const session = email ? sessions[email] : undefined
 
@@ -201,6 +234,48 @@ export function App() {
     }
   }, [session, email, groupBuyId, reloadKey])
 
+  useEffect(() => {
+    if (!session || !groupBuyId) {
+      setChat(null)
+      return
+    }
+    const token = session.token
+    let cancelled = false
+    async function loadChat() {
+      try {
+        const body = (await request(token, `/group-buys/${groupBuyId}/messages`)) as { chat: Chat }
+        if (!cancelled) {
+          setChat(body.chat)
+          setChatError(null)
+        }
+      } catch (error) {
+        if (!cancelled) setChatError(error instanceof Error ? error.message : "Chat failed.")
+      }
+    }
+    void loadChat()
+    const timer = window.setInterval(() => void loadChat(), 4000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [session, groupBuyId, chatReload])
+
+  async function sendChat(event: FormEvent) {
+    event.preventDefault()
+    if (!session || !groupBuyId || !draft.trim()) return
+    setChatBusy(true)
+    setChatError(null)
+    try {
+      await request(session.token, `/group-buys/${groupBuyId}/messages`, { method: "POST", body: { body: draft.trim() } })
+      setDraft("")
+      setChatReload((value) => value + 1)
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : "Message failed.")
+    } finally {
+      setChatBusy(false)
+    }
+  }
+
   function displayName(userId: string) {
     return (
       detail?.participants.find((participant) => participant.userId === userId)?.userName ??
@@ -230,7 +305,7 @@ export function App() {
       <header className="page-header">
         <p className="eyebrow">Curbstand · Task 4</p>
         <h1>Pickup fulfillment</h1>
-        <p>Deposits, check-in, and the supermarket comparison read from the API. Nothing on this page moves money.</p>
+        <p>Deposits, check-in, the farm chat, and the supermarket comparison read from the API. Nothing on this page moves money.</p>
       </header>
 
       <section className="toolbar card">
@@ -355,6 +430,44 @@ export function App() {
                   </li>
                 ))}
               </ul>
+            </article>
+
+            <article className="card">
+              <h2>Chat with the farm</h2>
+              {chat?.open ? (
+                <p>
+                  {chat.farmerName ?? "The farmer"}
+                  {chat.farmName ? ` · ${chat.farmName}` : ""}. Customers and the farmer use this chat on the website.
+                </p>
+              ) : (
+                <p>Chat opens after a farmer is selected.</p>
+              )}
+              {chat?.myText ? <p className="disclaimer">{TEXT_COPY[chat.myText.status] ?? chat.myText.detail}</p> : null}
+              {chat?.textSummary ? <p>{textSummaryCopy(chat.textSummary)}</p> : null}
+              {chatError ? <p className="alert" role="alert">{chatError}</p> : null}
+              <ol className="chat-log">
+                {chat?.messages.map((message) => (
+                  <li key={message.id}>
+                    <strong>{message.authorUserId === session?.userId ? "You" : message.authorName}</strong>
+                    <span>{formatPacific(message.createdAt)}</span>
+                    <p>{message.body}</p>
+                  </li>
+                ))}
+              </ol>
+              <form className="chat-form" onSubmit={(event) => void sendChat(event)}>
+                <label>
+                  Message
+                  <input
+                    value={draft}
+                    maxLength={1000}
+                    disabled={!chat?.open || chatBusy}
+                    onChange={(event) => setDraft(event.target.value)}
+                  />
+                </label>
+                <button type="submit" disabled={!chat?.open || chatBusy || !draft.trim()}>
+                  Send
+                </button>
+              </form>
             </article>
 
             <article className="card">

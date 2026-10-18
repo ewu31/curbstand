@@ -53,6 +53,8 @@ npm run typecheck
 | `BODY_LIMIT_BYTES` | `65536` | Larger bodies get 413 `PAYLOAD_TOO_LARGE` |
 | `PRICE_COMPARISON_ENABLED` | `true` | Set `false` to hide supermarket numbers. Deposits and check-in still work |
 | `GEMINI_API_KEY` / `GEMINI_MODEL` | empty / `gemini-2.5-flash` | Server-side only. Without a key the widget shows a labeled demo sample |
+| `PHOTON_API_KEY` / `PHOTON_PROJECT_ID` / `PHOTON_SMS_SENDER_ID` | empty | Photon 2.0 beta (`https://api.photon.codes/v1`). Sends the pickup text. Website chat still works when these are empty |
+| `SPECTRUM_PROJECT_ID` / `SPECTRUM_PROJECT_SECRET` | empty | Photon Spectrum iMessage agent (`npm run spectrum -w @curbstand/api`). Separate from the beta SMS keys |
 
 The pickup widget proxies `/api` to the API:
 
@@ -137,7 +139,9 @@ frontend can use it to filter the producer dashboard.
 | `POST /group-buys/:id/bids` | producer | 201 `{ bid }`; producer must be eligible (grows the produce type, pickup within service radius; otherwise 403 `NOT_ELIGIBLE` with `reasons`); open/funding only, before `bidDeadline`; availability must cover the pickup window |
 | `GET /group-buys/:id/bids` | — | `{ bids }`, cheapest first |
 | `POST /group-buys/:id/select-bid` | owner | `{ groupBuy }`; requires `funding`, committed ≥ target, before `bidDeadline`; matches once |
-| `PATCH /group-buys/:id/status` | see notes | `{ groupBuy }`. `cancelled`: owner while open/funding, or an operator; confirmed deposits are marked `refunded_manual`. `ready_for_pickup`: the selected bid's producer, while matched; check-in codes are issued |
+| `PATCH /group-buys/:id/status` | see notes | `{ groupBuy }`. `cancelled`: owner while open/funding, or an operator; confirmed deposits are marked `refunded_manual`. `ready_for_pickup`: the selected bid's producer, while matched; check-in codes are issued and each customer is queued for a Photon pickup text |
+| `GET /group-buys/:id/messages` | owner, participant, selected farmer, or operator | `{ chat }` with the website thread. Operator is read-only |
+| `POST /group-buys/:id/messages` | owner, participant, or selected farmer | 201 `{ message }`. Opens after a farmer is selected |
 | `PATCH /group-buys/:id/participants/:participantId/deposit` | owner or operator | `{ status }` is `confirmed_manual`, `refunded_manual`, or `forfeited_manual`. No money moves |
 | `GET /group-buys/:id/participants/:participantId/check-in-token` | participant, selected producer, or operator | `{ token }` for the QR payload |
 | `POST /group-buys/:id/check-in` | participant, selected producer, or operator | `{ token }` or `{ participantId, method: "manual" }` |

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
+    "spectrum": "tsx src/spectrum-agent.ts",
     "env:init": "node -e \"const fs=require('fs');fs.existsSync('.env')||fs.copyFileSync('.env.example','.env')\"",
     "db:setup": "npm run env:init && prisma migrate deploy && prisma db seed",
     "db:reset": "npm run env:init && prisma migrate reset --force",
@@ -25,6 +26,7 @@
     "bcryptjs": "^3.0.3",
     "fastify": "^5.12.7",
     "jose": "^6.2.12",
+    "spectrum-ts": "^12.11.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

@@ -19,9 +19,9 @@ export async function seedDemoUsers(prisma: PrismaClient) {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
   const customers = [
-    { email: "alice@demo.curbstand.app", name: "Alice Nguyen", orgType: "individual" },
-    { email: "bob@demo.curbstand.app", name: "Bob Martinez", orgType: "individual" },
-    { email: "kitchen@demo.curbstand.app", name: "Ballard Bistro", orgType: "restaurant" },
+    { email: "alice@demo.curbstand.app", name: "Alice Nguyen", orgType: "individual", phone: "+12065550101" },
+    { email: "bob@demo.curbstand.app", name: "Bob Martinez", orgType: "individual", phone: "+12065550102" },
+    { email: "kitchen@demo.curbstand.app", name: "Ballard Bistro", orgType: "restaurant", phone: "+12065550103" },
   ];
   for (const c of customers) {
     await prisma.user.upsert({
@@ -29,6 +29,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
       update: {},
       create: { ...c, role: "customer", passwordHash },
     });
+    await prisma.user.updateMany({ where: { email: c.email, phone: null }, data: { phone: c.phone } });
   }
 
   await prisma.user.upsert({
@@ -40,14 +41,20 @@ export async function seedDemoUsers(prisma: PrismaClient) {
       role: "customer",
       orgType: "individual",
       isOperator: true,
+      phone: "+12065550107",
       passwordHash,
     },
+  });
+  await prisma.user.updateMany({
+    where: { email: "operator@demo.curbstand.app", phone: null },
+    data: { phone: "+12065550107" },
   });
 
   const producers = [
     {
       email: "farmer.joe@demo.curbstand.app",
       name: "Joe Yamamoto",
+      phone: "+12065550105",
       farmName: "Skagit Valley Growers",
       serviceRadiusMiles: 80,
       farmLatitude: 48.4232,
@@ -57,6 +64,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
     {
       email: "farmer.maria@demo.curbstand.app",
       name: "Maria Lopez",
+      phone: "+12065550106",
       farmName: "Yakima Orchard Co.",
       serviceRadiusMiles: 160,
       farmLatitude: 46.6021,
@@ -66,6 +74,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
     {
       email: "farmer.sam@demo.curbstand.app",
       name: "Sam Okafor",
+      phone: "+12065550104",
       farmName: "Snoqualmie Greens",
       serviceRadiusMiles: 40,
       farmLatitude: 47.6493,
@@ -92,5 +101,8 @@ export async function seedDemoUsers(prisma: PrismaClient) {
         },
       },
     });
+    if (u.phone) {
+      await prisma.user.updateMany({ where: { email: u.email, phone: null }, data: { phone: u.phone } });
+    }
   }
 }
