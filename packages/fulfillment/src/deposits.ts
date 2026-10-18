@@ -13,7 +13,7 @@ import {
 } from "./types"
 
 const NEXT_STATUS: Record<DepositStatus, readonly ManualDepositStatus[]> = {
-  pending: ["confirmed_manual", "refunded_manual", "forfeited_manual"],
+  pending: ["confirmed_manual", "refunded_manual"],
   confirmed_manual: ["refunded_manual", "forfeited_manual"],
   refunded_manual: [],
   forfeited_manual: [],
@@ -183,23 +183,19 @@ export async function changeDepositStatus(
   }
 }
 
-export async function refundConfirmedDepositsOnCancel(
+/** Marks confirmed deposits refunded. Does not change the group-buy status. */
+export async function refundConfirmedDeposits(
   repo: FulfillmentRepository,
   actor: Actor | null,
   groupBuyId: string,
   now: Date,
-): Promise<{ status: "cancelled"; idempotent: boolean; disclaimer: string; paymentProcessed: false }> {
+): Promise<void> {
   requireActor(actor)
   const groupBuy = await loadGroupBuy(repo, groupBuyId)
   if (!canManageDeposits(actor, groupBuy)) {
     throw new FulfillmentError(403, "forbidden", "Only the group-buy owner or an operator can cancel this group buy.")
   }
-  if (groupBuy.status === "cancelled") {
-    return { status: "cancelled", idempotent: true, disclaimer: DEPOSIT_DISCLAIMER, paymentProcessed: false }
-  }
-  if (groupBuy.status !== "open" && groupBuy.status !== "funding" && groupBuy.status !== "matched") {
-    throw new FulfillmentError(409, "conflict", "Only an open, funding, or matched group buy can be cancelled.")
-  }
+  if (groupBuy.status !== "open" && groupBuy.status !== "funding" && groupBuy.status !== "matched") return
 
   const updatedAt = now.toISOString()
   const participants = await repo.listParticipants(groupBuyId)
@@ -222,7 +218,28 @@ export async function refundConfirmedDepositsOnCancel(
       }),
     )
   }
+}
 
+export async function refundConfirmedDepositsOnCancel(
+  repo: FulfillmentRepository,
+  actor: Actor | null,
+  groupBuyId: string,
+  now: Date,
+): Promise<{ status: "cancelled"; idempotent: boolean; disclaimer: string; paymentProcessed: false }> {
+  requireActor(actor)
+  const groupBuy = await loadGroupBuy(repo, groupBuyId)
+  if (!canManageDeposits(actor, groupBuy)) {
+    throw new FulfillmentError(403, "forbidden", "Only the group-buy owner or an operator can cancel this group buy.")
+  }
+  if (groupBuy.status === "cancelled") {
+    return { status: "cancelled", idempotent: true, disclaimer: DEPOSIT_DISCLAIMER, paymentProcessed: false }
+  }
+  if (groupBuy.status !== "open" && groupBuy.status !== "funding" && groupBuy.status !== "matched") {
+    throw new FulfillmentError(409, "conflict", "Only an open, funding, or matched group buy can be cancelled.")
+  }
+
+  await refundConfirmedDeposits(repo, actor, groupBuyId, now)
+  const updatedAt = now.toISOString()
   await repo.saveGroupBuy({ ...groupBuy, status: "cancelled", updatedAt })
   await repo.appendEvent(
     buildEvent({

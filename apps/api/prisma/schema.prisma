@@ -1,0 +1,188 @@
+// Curbstand MVP schema (DESIGN.md §9).
+// Conventions:
+//  - Status/enum columns are strings validated against @curbstand/shared enums
+//    (SQLite has no native enums).
+//  - Money is stored as integer cents (*Cents), quantity as integer hundredths
+//    of a pound (*LbsX100). Never floats.
+//  - Timestamps are UTC DateTime.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  role         String // Role: customer | producer
+  isOperator   Boolean  @default(false) // operator/admin actions (manual deposit/cancel)
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  orgType      String? // OrgType, customers only
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  producerProfile ProducerProfile?
+  groupBuys       GroupBuy[]         @relation("GroupBuyCreator")
+  participations  GroupBuyParticipant[]
+  bids            Bid[]
+  events          Event[]
+}
+
+model ProducerProfile {
+  userId             String  @id
+  farmName           String
+  serviceRadiusMiles Int
+  farmLatitude       Float
+  farmLongitude      Float
+
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  produceTypes ProducerProduceType[]
+}
+
+model ProducerProduceType {
+  producerId    String
+  produceTypeId String
+
+  producer    ProducerProfile @relation(fields: [producerId], references: [userId], onDelete: Cascade)
+  produceType ProduceType     @relation(fields: [produceTypeId], references: [id])
+
+  @@id([producerId, produceTypeId])
+}
+
+model ProduceType {
+  id       String @id // stable slug, e.g. "apples"
+  name     String
+  category String
+
+  producers ProducerProduceType[]
+  groupBuys GroupBuy[]
+}
+
+model PickupLocation {
+  id           String @id // stable slug
+  name         String
+  neighborhood String
+  city         String
+  latitude     Float
+  longitude    Float
+
+  groupBuys GroupBuy[]
+}
+
+model GroupBuy {
+  id                String   @id @default(cuid())
+  produceTypeId     String
+  targetLbsX100     Int
+  pickupLocationId  String
+  pickupWindowStart DateTime
+  pickupWindowEnd   DateTime
+  joinDeadline      DateTime
+  bidDeadline       DateTime
+  status            String   @default("open") // GroupBuyStatus
+  createdById       String
+  selectedBidId     String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  produceType    ProduceType           @relation(fields: [produceTypeId], references: [id])
+  pickupLocation PickupLocation        @relation(fields: [pickupLocationId], references: [id])
+  createdBy      User                  @relation("GroupBuyCreator", fields: [createdById], references: [id])
+  selectedBid    Bid?                  @relation("SelectedBid", fields: [selectedBidId], references: [id])
+  participants   GroupBuyParticipant[]
+  bids           Bid[]                 @relation("GroupBuyBids")
+  events         Event[]
+
+  @@index([status, produceTypeId])
+  @@index([pickupLocationId])
+}
+
+model GroupBuyParticipant {
+  id               String    @id @default(cuid())
+  groupBuyId       String
+  userId           String
+  requestedLbsX100 Int
+  depositAmountCents Int
+  depositStatus    String    @default("pending") // DepositStatus
+  depositUpdatedAt DateTime  @default(now())
+  completionStatus String    @default("pending") // CompletionStatus
+  checkInToken     String?   @unique // QR check-in secret (Task 4)
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  groupBuy GroupBuy @relation(fields: [groupBuyId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([groupBuyId, userId])
+}
+
+model Bid {
+  id                      String   @id @default(cuid())
+  groupBuyId              String
+  producerId              String
+  priceCentsPerLb         Int
+  availableLbsX100        Int
+  availabilityWindowStart DateTime
+  availabilityWindowEnd   DateTime
+  notes                   String?
+  status                  String   @default("submitted") // BidStatus
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  groupBuy           GroupBuy  @relation("GroupBuyBids", fields: [groupBuyId], references: [id], onDelete: Cascade)
+  producer           User      @relation(fields: [producerId], references: [id])
+  selectedOnGroupBuy GroupBuy? @relation("SelectedBid")
+
+  @@index([groupBuyId])
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  groupBuyId  String
+  actorUserId String?
+  eventType   String // EventType
+  payload     String   @default("{}") // JSON; no secrets or unnecessary PII
+  createdAt   DateTime @default(now())
+
+  groupBuy GroupBuy @relation(fields: [groupBuyId], references: [id], onDelete: Cascade)
+  actor    User?    @relation(fields: [actorUserId], references: [id])
+
+  @@index([groupBuyId, createdAt])
+}
+
+/// Approximate supermarket range. Money stays a decimal string because it is an estimate, not a ledger amount.
+model PriceBenchmark {
+  id            String   @id
+  produceType   String
+  region        String
+  currency      String   @default("USD")
+  unit          String   @default("lb")
+  retailLow     String
+  retailHigh    String
+  source        String
+  model         String
+  promptVersion String
+  promptHash    String
+  responseJson  String
+  retrievedAt   DateTime
+  expiresAt     DateTime
+
+  @@index([produceType, region, retrievedAt])
+}
+
+/// Manual distribution-center baseline used for the farmer-uplift comparison.
+model DistributionCenterBaseline {
+  produceType   String
+  region        String
+  currency      String   @default("USD")
+  baselinePerLb String
+  updatedAt     DateTime
+
+  @@id([produceType, region])
+}

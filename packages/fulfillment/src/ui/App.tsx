@@ -3,49 +3,40 @@ import type { PriceBenchmarkResponse } from "../benchmark/service"
 import { DEPOSIT_DISCLAIMER, DEPOSIT_STATUS_COPY, type DepositStatus, type GroupBuyStatus } from "../types"
 import { MarketComparison } from "./MarketComparison"
 
+type DemoAccount = { email: string; name: string; role: string }
+type Session = { token: string; userId: string; name: string; email: string; role: string; isOperator: boolean }
+
 type Participant = {
   id: string
   userId: string
+  userName: string
   requestedLbs: string
-  depositAmount: string | null
-  depositStatus: DepositStatus | null
-  depositStatusLabel: string | null
-  completionStatus: "pending" | "completed"
-  completionMethod: "qr" | "manual" | null
+  depositAmountUsd: string
+  depositStatus: DepositStatus
+  completionStatus: string
+  completedAt: string | null
 }
 
 type Detail = {
   id: string
-  produceType: string
+  produceType: { id: string; name: string }
   status: GroupBuyStatus
-  pickupLocationLabel: string
-  selectedBid: { pricePerLb: string; producerId: string } | null
-  depositDisclaimer: string
+  pickupLocation: { name: string }
+  selectedBid: { pricePerLbUsd: string; producerId: string } | null
   participants: Participant[]
-  events: Array<{ id: string; eventType: string; actorUserId: string; payload: Record<string, unknown>; createdAt: string }>
+  events: Array<{ id: string; eventType: string; actorUserId: string | null; payload: Record<string, unknown>; createdAt: string }>
 }
 
-type ActorOption = { id: string; name: string; role: string }
-type GroupBuySummary = { id: string; produceType: string; status: GroupBuyStatus }
+type GroupBuySummary = { id: string; status: GroupBuyStatus; produceType: { id: string; name: string } }
 
-type ApiDetail = {
-  id: string
-  produceType: string
-  status: GroupBuyStatus
-  pickupLocation?: { name?: string }
-  selectedBidId: string | null
-  bids: Array<{ id: string; pricePerLb: number | string; producerId: string }>
-  participants: Array<{
-    id: string
-    userId: string
-    requestedLbs: number | string
-    depositAmount: number | string | null
-    depositStatus: DepositStatus | null
-    completionStatus: string
-    completionMethod?: string | null
-  }>
-  events: Array<{ id: string; eventType: string; actorUserId?: string | null; payload: Record<string, unknown>; createdAt: string }>
-}
+const DEMO_ACCOUNTS: DemoAccount[] = [
+  { email: "alice@demo.curbstand.app", name: "Alice Nguyen", role: "customer" },
+  { email: "bob@demo.curbstand.app", name: "Bob Martinez", role: "customer" },
+  { email: "kitchen@demo.curbstand.app", name: "Ballard Bistro", role: "customer" },
+  { email: "farmer.sam@demo.curbstand.app", name: "Sam Okafor", role: "producer" },
+  { email: "operator@demo.curbstand.app", name: "Curbstand Operator", role: "operator" },
+]
+const DEMO_PASSWORD = "password123"
 
 const STATUS_LABEL: Record<GroupBuyStatus, string> = {
   open: "Open",
@@ -64,67 +55,42 @@ class ApiError extends Error {
   }
 }
 
-async function request(actorId: string, path: string, init?: { method?: string; body?: unknown }) {
+async function request(token: string, path: string, init?: { method?: string; body?: unknown }) {
   const hasBody = init?.body !== undefined
   const response = await fetch(`/api${path}`, {
     method: init?.method ?? "GET",
     headers: {
       ...(hasBody ? { "content-type": "application/json" } : {}),
-      ...(actorId ? { "x-user-id": actorId } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
     body: hasBody ? JSON.stringify(init.body) : undefined,
   })
-  const data = (await response.json()) as { data?: unknown; error?: { message?: string } | string; message?: string }
-  if (!response.ok) {
-    const message =
-      typeof data.error === "object" && data.error?.message
-        ? data.error.message
-        : typeof data.message === "string"
-          ? data.message
-          : "Request failed."
-    throw new ApiError(message, response.status)
-  }
-  return data.data ?? data
+  const data = (await response.json()) as { error?: { message?: string }; message?: string }
+  if (!response.ok) throw new ApiError(data.error?.message ?? data.message ?? "Request failed.", response.status)
+  return data
 }
 
-function moneyString(value: number | string | null): string | null {
-  if (value === null) return null
-  const amount = typeof value === "number" ? value : Number(value)
-  return Number.isFinite(amount) ? amount.toFixed(2) : String(value)
+function formatPacific(iso: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(new Date(iso))
 }
 
-function adaptDetail(raw: ApiDetail): Detail {
-  const selected = raw.bids.find((bid) => bid.id === raw.selectedBidId) ?? null
-  return {
-    id: raw.id,
-    produceType: raw.produceType,
-    status: raw.status,
-    pickupLocationLabel: raw.pickupLocation?.name ?? "Pickup",
-    selectedBid: selected ? { pricePerLb: moneyString(selected.pricePerLb) ?? selected.pricePerLb.toString(), producerId: selected.producerId } : null,
-    depositDisclaimer: DEPOSIT_DISCLAIMER,
-    participants: raw.participants.map((participant) => ({
-      id: participant.id,
-      userId: participant.userId,
-      requestedLbs: moneyString(participant.requestedLbs) ?? String(participant.requestedLbs),
-      depositAmount: moneyString(participant.depositAmount),
-      depositStatus: participant.depositStatus,
-      depositStatusLabel: participant.depositStatus ? DEPOSIT_STATUS_COPY[participant.depositStatus] : null,
-      completionStatus: participant.completionStatus === "completed" ? "completed" : "pending",
-      completionMethod: participant.completionMethod === "qr" || participant.completionMethod === "manual" ? participant.completionMethod : null,
-    })),
-    events: raw.events.map((event) => ({
-      id: event.id,
-      eventType: event.eventType,
-      actorUserId: event.actorUserId ?? "",
-      payload: event.payload,
-      createdAt: event.createdAt,
-    })),
-  }
+function completionLabel(status: string) {
+  if (status === "checked_in_qr") return "Checked in · qr"
+  if (status === "checked_in_manual") return "Checked in · manual"
+  if (status === "no_show") return "No show"
+  return "Not checked in"
 }
 
 export function App() {
-  const [actors, setActors] = useState<ActorOption[]>([])
-  const [actorId, setActorId] = useState("")
+  const [sessions, setSessions] = useState<Record<string, Session>>({})
+  const [email, setEmail] = useState(DEMO_ACCOUNTS[0]?.email ?? "")
   const [groupBuys, setGroupBuys] = useState<GroupBuySummary[]>([])
   const [groupBuyId, setGroupBuyId] = useState("")
   const [detail, setDetail] = useState<Detail | null>(null)
@@ -136,31 +102,45 @@ export function App() {
   const [busy, setBusy] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
 
+  const session = email ? sessions[email] : undefined
+
   useEffect(() => {
+    if (!email || sessions[email]) return
     let cancelled = false
-    void request("", "/dev/actors")
-      .then((rows) => {
+    void request("", "/auth/login", { method: "POST", body: { email, password: DEMO_PASSWORD } })
+      .then((body) => {
         if (cancelled) return
-        const next = rows as ActorOption[]
-        setActors(next)
-        setActorId((current) => current || next.find((actor) => actor.name === "Alice Chen")?.id || next[0]?.id || "")
+        const payload = body as { token: string; user: { id: string; name: string; email: string; role: string; isOperator: boolean } }
+        setSessions((current) => ({
+          ...current,
+          [email]: {
+            token: payload.token,
+            userId: payload.user.id,
+            name: payload.user.name,
+            email: payload.user.email,
+            role: payload.user.isOperator ? "operator" : payload.user.role,
+            isOperator: payload.user.isOperator,
+          },
+        }))
       })
       .catch((error: unknown) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : "The API is not reachable.")
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Sign-in failed.")
       })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [email, sessions])
 
   useEffect(() => {
-    if (!actorId && actors.length === 0) return
+    if (email && !session) return
     let cancelled = false
     async function load() {
       setLoadError(null)
       try {
-        const list = (await request(actorId, "/group-buys")) as GroupBuySummary[]
+        const token = session?.token ?? ""
+        const listBody = (await request(token, "/group-buys")) as { groupBuys: GroupBuySummary[] }
         if (cancelled) return
+        const list = listBody.groupBuys
         setGroupBuys(list)
         const id = groupBuyId || list[0]?.id || ""
         if (!groupBuyId && id) setGroupBuyId(id)
@@ -169,30 +149,32 @@ export function App() {
           setLoadError("No open group buys. Seed the database with npm run db:seed.")
           return
         }
-        const raw = (await request(actorId, `/group-buys/${id}`)) as ApiDetail
+        if (!token) {
+          setDetail(null)
+          setBenchmark(null)
+          setBenchmarkError(true)
+          setLoadError("Sign in as a demo account to see deposits and check-in.")
+          return
+        }
+        const detailBody = (await request(token, `/group-buys/${id}`)) as { groupBuy: Detail }
         if (cancelled) return
-        const next = adaptDetail(raw)
+        const next = detailBody.groupBuy
         setDetail(next)
         const entries = await Promise.all(
           next.participants.map(async (participant) => {
             try {
-              const token = (await request(actorId, `/group-buys/${id}/participants/${participant.id}/check-in-token`)) as { token?: string }
-              return [participant.id, token.token ?? ""] as const
+              const tokenBody = (await request(token, `/group-buys/${id}/participants/${participant.id}/check-in-token`)) as { token?: string }
+              return [participant.id, tokenBody.token ?? ""] as const
             } catch {
               return [participant.id, ""] as const
             }
           }),
         )
         if (!cancelled) setTokens(Object.fromEntries(entries.filter((entry) => entry[1])))
-        if (!actorId) {
-          setBenchmark(null)
-          setBenchmarkError(true)
-          return
-        }
         try {
           const nextBenchmark = (await request(
-            actorId,
-            `/price-benchmarks?produceType=${encodeURIComponent(next.produceType)}&region=seattle-puget-sound`,
+            token,
+            `/price-benchmarks?produceType=${encodeURIComponent(next.produceType.id)}&region=seattle-puget-sound`,
           )) as PriceBenchmarkResponse
           if (!cancelled) {
             setBenchmark(nextBenchmark)
@@ -217,17 +199,22 @@ export function App() {
     return () => {
       cancelled = true
     }
-  }, [actorId, actors.length, groupBuyId, reloadKey])
+  }, [session, email, groupBuyId, reloadKey])
 
   function displayName(userId: string) {
-    return actors.find((actor) => actor.id === userId)?.name ?? userId
+    return (
+      detail?.participants.find((participant) => participant.userId === userId)?.userName ??
+      Object.values(sessions).find((actor) => actor.userId === userId)?.name ??
+      userId
+    )
   }
 
   async function act(path: string, body?: unknown, method = "POST") {
+    if (!session) return
     setBusy(true)
     setActionError(null)
     try {
-      await request(actorId, path, { method, body })
+      await request(session.token, path, { method, body })
       setReloadKey((value) => value + 1)
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Request failed.")
@@ -236,7 +223,7 @@ export function App() {
     }
   }
 
-  const checkedIn = detail?.participants.filter((participant) => participant.completionStatus === "completed").length ?? 0
+  const checkedIn = detail?.participants.filter((participant) => participant.completionStatus.startsWith("checked_in")).length ?? 0
 
   return (
     <main>
@@ -250,27 +237,25 @@ export function App() {
         <fieldset>
           <legend>Act as</legend>
           <div className="actor-row">
-            {actors.map((actor) => (
+            {DEMO_ACCOUNTS.map((account) => (
               <button
-                key={actor.id}
+                key={account.email}
                 type="button"
-                aria-pressed={actorId === actor.id}
-                data-testid={`actor-${actor.role}-${actor.name.split(" ")[0]?.toLowerCase()}`}
+                aria-pressed={email === account.email}
                 onClick={() => {
                   setActionError(null)
-                  setActorId(actor.id)
+                  setEmail(account.email)
                 }}
               >
-                {actor.name} · {actor.role}
+                {account.name} · {sessions[account.email]?.role ?? account.role}
               </button>
             ))}
             <button
               type="button"
-              aria-pressed={actorId === ""}
-              data-testid="actor-signed-out"
+              aria-pressed={email === ""}
               onClick={() => {
                 setActionError(null)
-                setActorId("")
+                setEmail("")
               }}
             >
               Signed out
@@ -288,43 +273,35 @@ export function App() {
           >
             {groupBuys.map((groupBuy) => (
               <option key={groupBuy.id} value={groupBuy.id}>
-                {groupBuy.produceType} · {STATUS_LABEL[groupBuy.status]}
+                {groupBuy.produceType.name} · {STATUS_LABEL[groupBuy.status]}
               </option>
             ))}
             {groupBuyId && !groupBuys.some((groupBuy) => groupBuy.id === groupBuyId) ? (
-              <option value={groupBuyId}>{detail?.produceType ?? "Current"} · {detail ? STATUS_LABEL[detail.status] : "saved"}</option>
+              <option value={groupBuyId}>{detail?.produceType.name ?? "Current"} · {detail ? STATUS_LABEL[detail.status] : "saved"}</option>
             ) : null}
           </select>
         </label>
       </section>
 
-      {loadError ? (
-        <p className="alert" role="alert" data-testid="load-error">
-          {loadError}
-        </p>
-      ) : null}
-      {actionError ? (
-        <p className="alert" role="alert" data-testid="action-error">
-          {actionError}
-        </p>
-      ) : null}
+      {loadError ? <p className="alert" role="alert">{loadError}</p> : null}
+      {actionError ? <p className="alert" role="alert">{actionError}</p> : null}
 
       {detail ? (
         <section className="layout">
           <div className="stack">
             <article className="card">
-              <p className="eyebrow">Group buy · {detail.produceType}</p>
-              <h2 data-testid="group-buy-status">{STATUS_LABEL[detail.status]}</h2>
+              <p className="eyebrow">Group buy · {detail.produceType.name}</p>
+              <h2>{STATUS_LABEL[detail.status]}</h2>
               <p>
-                Pickup at {detail.pickupLocationLabel}. Selected bid{" "}
-                {detail.selectedBid ? `$${detail.selectedBid.pricePerLb}/lb` : "not selected"}. {checkedIn} of{" "}
+                Pickup at {detail.pickupLocation.name}. Selected bid{" "}
+                {detail.selectedBid ? `$${detail.selectedBid.pricePerLbUsd}/lb` : "not selected"}. {checkedIn} of{" "}
                 {detail.participants.length} participants checked in.
               </p>
               <div className="actor-row">
-                <button type="button" data-testid="complete-group-buy" disabled={busy} onClick={() => void act(`/group-buys/${detail.id}/complete`)}>
+                <button type="button" disabled={busy} onClick={() => void act(`/group-buys/${detail.id}/complete`)}>
                   Mark group buy completed
                 </button>
-                <button type="button" data-testid="cancel-group-buy" disabled={busy} onClick={() => void act(`/group-buys/${detail.id}/cancel`)}>
+                <button type="button" disabled={busy} onClick={() => void act(`/group-buys/${detail.id}/cancel`)}>
                   Cancel and mark refunds
                 </button>
               </div>
@@ -332,45 +309,23 @@ export function App() {
 
             <article className="card">
               <h2>Deposits</h2>
-              <p className="disclaimer" data-testid="deposit-disclaimer">
-                {detail.depositDisclaimer}
-              </p>
+              <p className="disclaimer">{DEPOSIT_DISCLAIMER}</p>
               <ul className="people">
                 {detail.participants.map((participant) => (
                   <li key={participant.id}>
                     <header>
-                      <strong>{displayName(participant.userId)}</strong>
-                      <span>
-                        {participant.requestedLbs} lb · {participant.depositAmount ? `$${participant.depositAmount}` : "No amount"}
-                      </span>
+                      <strong>{participant.userName}</strong>
+                      <span>{participant.requestedLbs} lb · ${participant.depositAmountUsd}</span>
                     </header>
-                    <p data-testid={`deposit-status-${participant.id}`}>{participant.depositStatusLabel}</p>
+                    <p>{DEPOSIT_STATUS_COPY[participant.depositStatus]}</p>
                     <div className="actor-row">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          void act(`/group-buys/${detail.id}/participants/${participant.id}/deposit`, { status: "confirmed_manual" }, "PATCH")
-                        }
-                      >
+                      <button type="button" disabled={busy} onClick={() => void act(`/group-buys/${detail.id}/participants/${participant.id}/deposit`, { status: "confirmed_manual" }, "PATCH")}>
                         Confirm manually
                       </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          void act(`/group-buys/${detail.id}/participants/${participant.id}/deposit`, { status: "refunded_manual" }, "PATCH")
-                        }
-                      >
+                      <button type="button" disabled={busy} onClick={() => void act(`/group-buys/${detail.id}/participants/${participant.id}/deposit`, { status: "refunded_manual" }, "PATCH")}>
                         Mark refunded manually
                       </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          void act(`/group-buys/${detail.id}/participants/${participant.id}/deposit`, { status: "forfeited_manual" }, "PATCH")
-                        }
-                      >
+                      <button type="button" disabled={busy} onClick={() => void act(`/group-buys/${detail.id}/participants/${participant.id}/deposit`, { status: "forfeited_manual" }, "PATCH")}>
                         Mark forfeited manually
                       </button>
                     </div>
@@ -385,37 +340,15 @@ export function App() {
                 {detail.participants.map((participant) => (
                   <li key={participant.id}>
                     <header>
-                      <strong>{displayName(participant.userId)}</strong>
-                      <span>
-                        {participant.completionStatus === "completed"
-                          ? `Checked in${participant.completionMethod ? ` · ${participant.completionMethod}` : ""}`
-                          : "Not checked in"}
-                      </span>
+                      <strong>{participant.userName}</strong>
+                      <span>{completionLabel(participant.completionStatus)}</span>
                     </header>
-                    {tokens[participant.id] ? (
-                      <p>
-                        QR payload <code data-testid={`qr-payload-${participant.id}`}>{tokens[participant.id]}</code>
-                      </p>
-                    ) : (
-                      <p>QR payload hidden for this actor.</p>
-                    )}
+                    {tokens[participant.id] ? <p>QR payload <code>{tokens[participant.id]}</code></p> : <p>QR payload hidden for this actor.</p>}
                     <div className="actor-row">
-                      <button
-                        type="button"
-                        data-testid={`qr-check-in-${participant.id}`}
-                        disabled={busy || !tokens[participant.id]}
-                        onClick={() => void act(`/group-buys/${detail.id}/check-in`, { token: tokens[participant.id] })}
-                      >
+                      <button type="button" disabled={busy || !tokens[participant.id]} onClick={() => void act(`/group-buys/${detail.id}/check-in`, { token: tokens[participant.id] })}>
                         Submit QR check-in
                       </button>
-                      <button
-                        type="button"
-                        data-testid={`manual-check-in-${participant.id}`}
-                        disabled={busy}
-                        onClick={() =>
-                          void act(`/group-buys/${detail.id}/check-in`, { participantId: participant.id, method: "manual" })
-                        }
-                      >
+                      <button type="button" disabled={busy} onClick={() => void act(`/group-buys/${detail.id}/check-in`, { participantId: participant.id, method: "manual" })}>
                         Manual check-in
                       </button>
                     </div>
@@ -426,11 +359,12 @@ export function App() {
 
             <article className="card">
               <h2>Event history</h2>
-              <ol data-testid="event-history">
-                {detail.events.map((event) => (
-                  <li key={event.id} data-testid="event">
+              <ol>
+                {[...detail.events].reverse().map((event) => (
+                  <li key={event.id}>
                     <strong>{event.eventType}</strong>
-                    <span>{displayName(event.actorUserId)}</span>
+                    <span>{event.actorUserId ? displayName(event.actorUserId) : "System"}</span>
+                    <span>{formatPacific(event.createdAt)}</span>
                     <code>{JSON.stringify(event.payload)}</code>
                   </li>
                 ))}
@@ -438,8 +372,8 @@ export function App() {
             </article>
           </div>
           <MarketComparison
-            produceType={detail.produceType}
-            groupBuyPricePerLb={detail.selectedBid?.pricePerLb ?? null}
+            produceType={detail.produceType.id}
+            groupBuyPricePerLb={detail.selectedBid?.pricePerLbUsd ?? null}
             benchmark={benchmark}
             error={benchmarkError}
           />
@@ -447,9 +381,6 @@ export function App() {
       ) : (
         <MarketComparison produceType="kale" groupBuyPricePerLb={null} benchmark={benchmark} error={benchmarkError} />
       )}
-      {benchmark && !benchmark.enabled ? (
-        <p data-testid="comparison-hidden">Market comparison is turned off. Deposits and check-in still work.</p>
-      ) : null}
     </main>
   )
 }
