@@ -1,30 +1,35 @@
 {
   "name": "curbstand",
   "private": true,
-  "version": "0.1.0",
-  "packageManager": "npm@10.9.2",
+  "type": "module",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
+  "engines": {
+    "node": ">=22.22.0"
+  },
   "scripts": {
-    "astro": "npm run astro --prefix web --",
-    "dev": "npm run dev --prefix web",
-    "stop:web": "npm run astro --prefix web -- dev stop",
+    "dev": "npm run server:up && npm run dev:web",
+    "db:setup": "npm run db:setup -w @curbstand/api",
+    "db:reset": "npm run db:reset -w @curbstand/api",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "start": "npm run start -w @curbstand/api",
+    "db:migrate": "npm run db:migrate -w @curbstand/api",
+    "db:seed": "npm run db:seed -w @curbstand/api",
     "dev:web": "npm run dev --prefix web",
+    "dev:api": "npm run dev -w @curbstand/api",
     "demo:web": "npm run demo --prefix web",
+    "astro": "npm run astro --prefix web --",
+    "stop:web": "npm run astro --prefix web -- dev stop",
     "build:web": "npm run build --prefix web",
+    "build": "npm run typecheck && npm run build:web",
     "check:web": "npm run check --prefix web",
     "test:web": "npm test --prefix web",
-    "build": "npm run build --workspace @curbstand/db && npm run build --workspace @curbstand/api",
-    "typecheck": "npm run build --workspace @curbstand/db && npm run typecheck --workspace @curbstand/api",
-    "db:generate": "npm run db:generate --workspace @curbstand/db",
-    "db:migrate": "npm run db:migrate --workspace @curbstand/db",
-    "db:seed": "npm run db:seed --workspace @curbstand/db",
-    "start": "npm run start --workspace @curbstand/api"
-  },
-  "devDependencies": {
-    "@types/node": "^22.10.2",
-    "typescript": "^5.7.2"
+    "server:up": "docker compose up --build --detach --wait",
+    "server:down": "docker compose down",
+    "server:logs": "docker compose logs --follow api",
+    "server:seed": "docker compose exec api npm run db:seed"
   }
 }

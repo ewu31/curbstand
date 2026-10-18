@@ -1,8 +1,15 @@
-import { serve } from "@hono/node-server";
-import { createDb } from "@curbstand/db";
-import { createApp } from "./app.js";
+import { buildApp } from "./app";
+import { config } from "./config";
+import { prisma } from "./lib/db";
 
-const port = Number(process.env.API_PORT ?? 8787);
-const { db } = createDb();
-serve({ fetch: createApp(db).fetch, port });
-console.log(`Curbstand API listening on http://localhost:${port}`);
+const app = await buildApp();
+
+const shutdown = async () => {
+  await app.close();
+  await prisma.$disconnect();
+  process.exit(0);
+};
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+await app.listen({ port: config.port, host: config.host });
