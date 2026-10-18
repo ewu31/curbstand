@@ -5,6 +5,7 @@ import {
   hundredthsToLbs,
   joinGroupBuySchema,
   listGroupBuysQuerySchema,
+  producerEligibility,
   selectBidSchema,
   updateGroupBuyStatusSchema,
   type BidResponse,
@@ -167,8 +168,28 @@ const routes: FastifyPluginAsync = async (app) => {
     async (request, reply): Promise<BidResponse> => {
       const user = authUser(request);
       const input = createBidSchema.parse(request.body);
-      const groupBuy = await prisma.groupBuy.findUnique({ where: { id: request.params.id } });
+      const groupBuy = await prisma.groupBuy.findUnique({
+        where: { id: request.params.id },
+        include: { pickupLocation: true },
+      });
       if (!groupBuy) throw notFound("Group buy not found");
+
+      const profile = await prisma.producerProfile.findUnique({
+        where: { userId: user.id },
+        include: { produceTypes: { select: { produceTypeId: true } } },
+      });
+      if (!profile) throw forbidden("Producer profile is missing");
+      const eligibility = producerEligibility(
+        { ...profile, produceTypes: profile.produceTypes.map((t) => t.produceTypeId) },
+        groupBuy,
+      );
+      if (!eligibility.eligible) {
+        throw new HttpError("NOT_ELIGIBLE", "You are not eligible to bid on this group buy", {
+          reasons: eligibility.reasons,
+          distanceMiles: eligibility.distanceMiles,
+          serviceRadiusMiles: profile.serviceRadiusMiles,
+        });
+      }
       if (!ACCEPTING.includes(groupBuy.status as GroupBuyStatus)) {
         throw new HttpError("GROUP_BUY_CLOSED", "This group buy is no longer accepting bids", { status: groupBuy.status });
       }

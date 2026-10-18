@@ -108,7 +108,9 @@ clients must not infer state from a missing field.
 strings; validate with these lists (`isOneOf`, `z.enum(...)`).
 
 **Location matching.** Producers have `farmLatitude`/`farmLongitude` and
-`serviceRadiusMiles`; use `distanceMiles()` against the pickup location.
+`serviceRadiusMiles`. `producerEligibility(profile, groupBuy)` returns
+`{ eligible, reasons, distanceMiles }`. The bid route enforces it, and the
+frontend can use it to filter the producer dashboard.
 
 ## Group-buy API (Task 3)
 
@@ -118,7 +120,7 @@ strings; validate with these lists (`isOneOf`, `z.enum(...)`).
 | `POST /group-buys` | customer | 201 `{ groupBuy }`; `createGroupBuySchema` |
 | `GET /group-buys/:id` | any | `{ groupBuy }` (`GroupBuyDetail`, including `myParticipation` and `events`) |
 | `POST /group-buys/:id/participants` | customer | 201 `{ participant }`; first join moves `open → funding`; records a `pending` deposit intent |
-| `POST /group-buys/:id/bids` | producer | 201 `{ bid }`; open/funding only, before `bidDeadline`; availability must cover the pickup window |
+| `POST /group-buys/:id/bids` | producer | 201 `{ bid }`; producer must be eligible (grows the produce type, pickup within service radius; otherwise 403 `NOT_ELIGIBLE` with `reasons`); open/funding only, before `bidDeadline`; availability must cover the pickup window |
 | `GET /group-buys/:id/bids` | — | `{ bids }`, cheapest first |
 | `POST /group-buys/:id/select-bid` | owner | `{ groupBuy }`; requires `funding`, committed ≥ target, before `bidDeadline`; matches once |
 | `PATCH /group-buys/:id/status` | see notes | `{ groupBuy }`. `cancelled`: owner while open/funding, or an operator. `ready_for_pickup`: the selected bid's producer, while matched |

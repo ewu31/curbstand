@@ -56,3 +56,20 @@ export function distanceMiles(
     Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
+
+export type IneligibleReason = "produce_type" | "service_radius";
+
+/**
+ * Whether a producer may bid on a group buy: they grow the produce type and the
+ * pickup location is within their service radius of the farm.
+ */
+export function producerEligibility(
+  producer: { produceTypes: readonly string[]; serviceRadiusMiles: number; farmLatitude: number; farmLongitude: number },
+  groupBuy: { produceTypeId: string; pickupLocation: { latitude: number; longitude: number } },
+): { eligible: boolean; reasons: IneligibleReason[]; distanceMiles: number } {
+  const miles = distanceMiles({ latitude: producer.farmLatitude, longitude: producer.farmLongitude }, groupBuy.pickupLocation);
+  const reasons: IneligibleReason[] = [];
+  if (!producer.produceTypes.includes(groupBuy.produceTypeId)) reasons.push("produce_type");
+  if (miles > producer.serviceRadiusMiles) reasons.push("service_radius");
+  return { eligible: reasons.length === 0, reasons, distanceMiles: Math.round(miles * 10) / 10 };
+}

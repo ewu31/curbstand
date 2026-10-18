@@ -147,6 +147,20 @@ describe("bidding and matching", () => {
     expect((await call("POST", `/group-buys/${gb.id}/bids`, owner, bidPayload())).statusCode).toBe(403);
   });
 
+  it("rejects producers who don't grow the produce type or are out of range", async () => {
+    const kale = await createGroupBuy({ produceType: "kale" });
+    const wrongType = await call("POST", `/group-buys/${kale.id}/bids`, farmer, bidPayload());
+    expect(wrongType.statusCode).toBe(403);
+    expect(wrongType.json().error).toMatchObject({ code: "NOT_ELIGIBLE", details: { reasons: ["produce_type"] } });
+
+    // Spokane farm, 50 mi radius, Seattle pickup (~230 mi)
+    const far = await signup(app, producerSignup({ farmLatitude: 47.6588, farmLongitude: -117.426 }));
+    const gb = await createGroupBuy();
+    const res = await call("POST", `/group-buys/${gb.id}/bids`, far, bidPayload());
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.details.reasons).toEqual(["service_radius"]);
+  });
+
   it("requires availability to cover the pickup window", async () => {
     const gb = await createGroupBuy();
     const res = await call("POST", `/group-buys/${gb.id}/bids`, farmer, bidPayload({ availabilityWindowStart: hoursFromNow(73) }));

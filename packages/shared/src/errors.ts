@@ -6,6 +6,8 @@ export const ERROR_CODES = {
   UNAUTHORIZED: 401,
   INVALID_CREDENTIALS: 401,
   FORBIDDEN: 403,
+  /** Producer doesn't grow this produce type or the pickup is outside their service radius. */
+  NOT_ELIGIBLE: 403,
   NOT_FOUND: 404,
   CONFLICT: 409,
   EMAIL_TAKEN: 409,
