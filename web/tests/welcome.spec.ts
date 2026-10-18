@@ -1,0 +1,32 @@
+import { expect, test } from '@playwright/test';
+test('first visitors learn about produce drops and returning visitors see the market', async ({ page }) => {
+ await page.goto('/');
+ await expect(page.getByRole('heading', { name: 'Good produce. Great neighbors.' })).toBeVisible();
+ await expect(page.getByRole('heading', { name: 'The drop is confirmed' })).toBeVisible();
+ await page.setViewportSize({ width: 390, height: 844 });
+ expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+ await page.screenshot({ path: 'artifacts/welcome-mobile.png', fullPage: true });
+ await page.getByRole('button', { name: 'Explore produce drops' }).click();
+ await expect(page.locator('.card').first()).toBeVisible();
+ await page.reload();
+ await expect(page.locator('.welcome-page')).toHaveCount(0);
+ await expect(page.getByLabel('Account menu')).toHaveText('');
+ await expect(page.locator('.account-avatar')).toBeVisible();
+});
+test('producer can choose a category at registration and update their profile', async ({ page }) => {
+ await page.goto('/register');
+ await page.getByLabel('Name', { exact: true }).fill('Backyard Grower');
+ await page.getByLabel('Email').fill('grower@example.test');
+ await page.getByLabel('Password').fill('password123');
+ await page.getByRole('radio', { name: 'Producer', exact: true }).check();
+ await page.getByLabel('Producer type').selectOption('at_home');
+ await page.getByRole('button', { name: 'Create account' }).click();
+ await expect(page).toHaveURL(/you$/);
+ await page.goto('/profile');
+ await expect(page.getByLabel('Producer type')).toHaveValue('at_home');
+ await page.getByLabel('Producer type').selectOption('large_scale_farmer');
+ await page.getByRole('button', { name: 'Save producer type' }).click();
+ await expect(page.getByRole('status')).toHaveText('Producer type saved.');
+ await page.reload();
+ await expect(page.getByLabel('Producer type')).toHaveValue('large_scale_farmer');
+});

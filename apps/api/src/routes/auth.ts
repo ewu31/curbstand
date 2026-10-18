@@ -37,6 +37,7 @@ const routes: FastifyPluginAsync = async (app) => {
               ? {
                   create: {
                     farmName: input.farmName,
+                    producerType: input.producerType,
                     serviceRadiusMiles: input.serviceRadiusMiles,
                     farmLatitude: input.farmLatitude,
                     farmLongitude: input.farmLongitude,

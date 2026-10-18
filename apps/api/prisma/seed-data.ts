@@ -26,7 +26,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
   for (const c of customers) {
     await prisma.user.upsert({
       where: { email: c.email },
-      update: {},
+      update: { photoUrl: c.photoUrl },
       create: { ...c, role: "customer", passwordHash },
     });
     await prisma.user.updateMany({ where: { email: c.email, phone: null }, data: { phone: c.phone } });
@@ -34,7 +34,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
 
   await prisma.user.upsert({
     where: { email: "operator@demo.curbstand.app" },
-    update: { isOperator: true },
+    update: { isOperator: true, photoUrl: "/avatars/operator.svg" },
     create: {
       email: "operator@demo.curbstand.app",
       name: "Curbstand Operator",
@@ -56,6 +56,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
       name: "Joe Yamamoto",
       phone: "+12065550105",
       farmName: "Skagit Valley Growers",
+      producerType: "local_farmer",
       serviceRadiusMiles: 80,
       farmLatitude: 48.4232,
       farmLongitude: -122.3343,
@@ -66,6 +67,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
       name: "Maria Lopez",
       phone: "+12065550106",
       farmName: "Yakima Orchard Co.",
+      producerType: "large_scale_farmer",
       serviceRadiusMiles: 160,
       farmLatitude: 46.6021,
       farmLongitude: -120.5059,
@@ -76,16 +78,17 @@ export async function seedDemoUsers(prisma: PrismaClient) {
       name: "Sam Okafor",
       phone: "+12065550104",
       farmName: "Snoqualmie Greens",
+      producerType: "at_home",
       serviceRadiusMiles: 40,
       farmLatitude: 47.6493,
       farmLongitude: -121.9087,
       produceTypes: ["lettuce", "kale", "tomatoes"],
     },
   ];
-  for (const { produceTypes, farmName, serviceRadiusMiles, farmLatitude, farmLongitude, ...u } of producers) {
+  for (const { produceTypes, farmName, producerType, serviceRadiusMiles, farmLatitude, farmLongitude, ...u } of producers) {
     await prisma.user.upsert({
       where: { email: u.email },
-      update: {},
+      update: { photoUrl: u.photoUrl, producerProfile: { update: { producerType } } },
       create: {
         ...u,
         role: "producer",
@@ -93,6 +96,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
         producerProfile: {
           create: {
             farmName,
+            producerType,
             serviceRadiusMiles,
             farmLatitude,
             farmLongitude,

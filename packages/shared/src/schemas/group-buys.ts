@@ -38,17 +38,17 @@ export const createGroupBuySchema = z
   .object({
     produceType: produceTypeId,
     targetLbs: positiveLbsSchema,
+    pricePerLbUsd: positiveUsdAmountSchema,
     pickupLocationId,
     pickupWindowStart: isoDateTimeSchema,
     pickupWindowEnd: isoDateTimeSchema,
     joinDeadline: isoDateTimeSchema,
-    bidDeadline: isoDateTimeSchema,
+    bidDeadline: isoDateTimeSchema.optional(),
   })
   .superRefine((v, ctx) => {
     const issue = (path: string, message: string) => ctx.addIssue({ code: "custom", path: [path], message });
     if (v.pickupWindowEnd <= v.pickupWindowStart) issue("pickupWindowEnd", "Must be after pickupWindowStart");
-    if (v.bidDeadline > v.pickupWindowStart) issue("bidDeadline", "Must be on or before pickupWindowStart");
-    if (v.joinDeadline >= v.bidDeadline) issue("joinDeadline", "Must be before bidDeadline");
+    if (v.joinDeadline >= v.pickupWindowStart) issue("joinDeadline", "Must be before pickupWindowStart");
   });
 export type CreateGroupBuyInput = z.input<typeof createGroupBuySchema>;
 
@@ -90,6 +90,11 @@ export type ProduceTypeDto = ProduceTypeSeed;
 export type PickupLocationDto = PickupLocationSeed;
 
 export interface GroupBuySummary {
+  pricePerLbUsd: string | null;
+  sellerName: string;
+  sellerPhotoUrl?: string | null;
+  /** Null when the drop creator has no producer profile. */
+  producerType: "at_home" | "local_farmer" | "large_scale_farmer" | null;
   id: string;
   status: GroupBuyStatus;
   produceType: ProduceTypeDto;

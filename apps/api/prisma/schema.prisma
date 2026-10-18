@@ -22,6 +22,7 @@ model User {
   name         String
   email        String   @unique
   phone        String?
+  photoUrl     String?
   passwordHash String
   orgType      String? // OrgType, customers only
   createdAt    DateTime @default(now())
@@ -38,6 +39,7 @@ model User {
 
 model ProducerProfile {
   userId             String  @id
+  producerType       String @default("local_farmer")
   farmName           String
   serviceRadiusMiles Int
   farmLatitude       Float
@@ -80,6 +82,7 @@ model PickupLocation {
 model GroupBuy {
   id                String   @id @default(cuid())
   produceTypeId     String
+  priceCentsPerLb   Int?
   targetLbsX100     Int
   pickupLocationId  String
   pickupWindowStart DateTime

@@ -3,6 +3,44 @@
 Group-buy platform for produce. See [DESIGN.md](./DESIGN.md) and
 [IMPLEMENTATION_TASKS.md](./IMPLEMENTATION_TASKS.md).
 
+## Frontend and Docker API
+
+Requires Node 22.22+ and Docker Desktop running with Linux containers.
+
+```sh
+npm ci
+npm ci --prefix web
+npm run dev
+```
+
+Open http://127.0.0.1:4321. `npm run dev` builds and starts the API container,
+waits for database migrations and health checks, then starts Astro locally with
+hot reload. The API is at http://127.0.0.1:8787. SQLite persists in the
+`api-data` Docker volume across restarts and rebuilds. Ctrl+C stops Astro;
+`npm run server:down` stops the API without deleting its data.
+
+Run `npm run server:seed` once to add demo accounts.
+Use `alice@demo.curbstand.app` (customer) or `farmer.joe@demo.curbstand.app`
+(producer), password `password123`. Registration also creates real customer
+and producer accounts. Producer registration requires farm location, service
+radius, and produce types for their producer profile.
+
+- `npm run server:up`: build/start API; rerun after server source changes.
+- `npm run server:logs`: follow API logs.
+- `npm run dev:web`: frontend only, using `PUBLIC_API_BASE` (default local API).
+- `npm run dev:api`: local API watch mode after `npm run db:setup`.
+- `npm run demo:web`: standalone browser fixture demo, no API required.
+- `npm run check:web`, `npm run build:web`, `npm run test:web`: frontend checks.
+- `npm run test:integration`: live browser journey against Docker (creates test accounts and a group buy in its database; requires Playwright Chromium or local Edge).
+
+The Compose configuration is for local development and binds the API only to
+localhost. Set a strong `JWT_SECRET`, production environment, and explicit
+`CORS_ORIGINS` for a production deployment. Images contain neither local `.env`
+files nor databases. Migrations and reference catalog setup run on startup; demo account seeding is explicit.
+
+Live deposits are simulated intents. Deposit updates and pickup check-in still
+await backend endpoints; their controls remain available only in fixture mode.
+
 ## Stack
 
 | Concern | Choice |
@@ -13,7 +51,7 @@ Group-buy platform for produce. See [DESIGN.md](./DESIGN.md) and
 | Auth | Stateless JWT bearer tokens (HS256, `jose`), bcrypt password hashes |
 | Validation | Zod 4 schemas, shared with the frontend |
 | Tests | Vitest + `app.inject()` against a throwaway SQLite file |
-| Frontend | `apps/web` (Task 2) |
+| Frontend | Astro + React (`web`) |
 
 ```
 packages/shared   @curbstand/shared — enums, units, time, error shape, catalog, request schemas
@@ -23,7 +61,7 @@ apps/web          @curbstand/web    — frontend (Task 2)
 
 ## Run locally
 
-Requires Node 22.12+ (`nvm use` picks up `.nvmrc`). Fastify's test tooling
+Requires Node 22.22+ (`nvm use` picks up `.nvmrc`). Fastify's test tooling
 depends on `cookie@2`, which is ESM-only and declares `node >=22`; on Node 20
 the API tests crash.
 `.npmrc` sets `engine-strict`, so `npm install` fails early on an unsupported
@@ -32,7 +70,7 @@ version.
 ```sh
 npm install          # also runs `prisma generate`
 npm run db:setup     # creates apps/api/.env from .env.example, applies migrations, seeds
-npm run dev          # API on http://127.0.0.1:8787 (watch mode); `npm start` without watch
+npm run dev:api      # API on http://127.0.0.1:8787 (watch mode); `npm start` without watch
 npm test             # all workspaces
 npm run typecheck
 ```
@@ -48,7 +86,7 @@ npm run typecheck
 | `JWT_EXPIRES_IN` | `7d` | |
 | `PORT` / `HOST` | `8787` / `127.0.0.1` | |
 | `DEPOSIT_AMOUNT_USD` | `5.00` | Fixed simulated deposit per participation (`config.depositAmountCents`) |
-| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated |
+| `CORS_ORIGINS` | `http://localhost:4321,http://127.0.0.1:4321` | Comma-separated |
 | `AUTH_RATE_LIMIT_MAX` / `AUTH_RATE_LIMIT_WINDOW_MS` | `10` / `60000` | Per-IP limit on signup and login; returns 429 `RATE_LIMITED` |
 | `BODY_LIMIT_BYTES` | `65536` | Larger bodies get 413 `PAYLOAD_TOO_LARGE` |
 | `PRICE_COMPARISON_ENABLED` | `true` | Set `false` to hide supermarket numbers. Deposits and check-in still work |
@@ -128,7 +166,7 @@ strings; validate with these lists (`isOneOf`, `z.enum(...)`).
 `{ eligible, reasons, distanceMiles }`. The bid route enforces it, and the
 frontend can use it to filter the producer dashboard.
 
-## Group-buy API (Task 3)
+## Fixed-price produce drops
 
 | Route | Auth | Notes |
 | --- | --- | --- |
@@ -150,51 +188,26 @@ frontend can use it to filter the producer dashboard.
 | `GET /price-benchmarks?produceType=&region=` | any | Approximate supermarket range, or `{ enabled: false }` when the flag is off |
 | `POST /jobs/resolve-group-buys` | operator | `{ resolvedGroupBuyIds, resolvedAt }` |
 
-Conflict codes (409): `GROUP_BUY_CLOSED`, `DEADLINE_PASSED`, `ALREADY_JOINED`,
-`QUANTITY_UNAVAILABLE`, `THRESHOLD_NOT_MET`, `ALREADY_MATCHED`,
-`INVALID_TRANSITION`.
+- `POST /group-buys`: producer only; price and quantities are decimal strings.
+- `GET /group-buys`: public browse; includes price and seller name.
+- `GET /group-buys/:id`: authenticated detail.
+- `POST /group-buys/:id/participants`: customer commitment.
+- `PATCH /group-buys/:id/status`: seller marks a confirmed drop ready for pickup;
+  seller can cancel an open/funding drop, and operators can cancel as allowed.
+- `POST /jobs/resolve-group-buys`: expires unconfirmed drops at the join deadline.
 
-### Scheduling and resolution
+Bidding and bid-selection routes have been removed. Historical bid tables and
+fields remain for existing data; legacy requests with no fixed seller price
+cannot accept new commitments. Sellers should publish a new fixed-price drop.
 
-Join, bid, and pickup windows are stored as UTC timestamps. A scheduler is meant
-to call `POST /jobs/resolve-group-buys` (as an operator). It cancels `open`
-group buys past their join deadline and `funding` group buys past their bid
-deadline, recording a `group_buy.cancelled` event with
-`reason: "deadline_expired"` for each one. It is safe to call repeatedly,
-because only rows that are still eligible are changed.
+Producer profiles support `producerType`: `at_home`, `local_farmer`, or
+`large_scale_farmer`, editable at signup and with `PATCH /me`. Existing producers
+default to `local_farmer`. The frontend includes profile editing and a first-visit
+welcome page, remembered in browser local storage.
 
-## Group-buy contract (Tasks 2–4)
-
-Request schemas and response types live in
-`packages/shared/src/schemas/group-buys.ts`. Use them on both sides instead of
-redefining shapes.
-
-- **Requests:** `listGroupBuysQuerySchema`, `createGroupBuySchema` (also checks
-  `joinDeadline < bidDeadline ≤ pickupWindowStart < pickupWindowEnd`),
-  `joinGroupBuySchema`, `updateGroupBuyStatusSchema`, `createBidSchema`,
-  `selectBidSchema`. Parsing converts to storage units: cents, lbs×100, `Date`.
-  Checks that depend on the clock ("deadline not passed") and on DB state are
-  left to the route.
-- **Responses:** `GroupBuySummary`, `GroupBuyDetail` (adds `selectedBid`,
-  `myParticipation`, `participants`, `depositSummary` with `simulated: true`,
-  and `events` oldest first), `ParticipantDto`, `BidDto`, `EventDto`.
-- **Envelopes:** one named key per resource: `{ groupBuys }`, `{ groupBuy }`,
-  `{ participant }`, `{ bid }`, `{ bids }` (sorted by `pricePerLbUsd`).
-- **Server serializers** (`apps/api/src/lib/serializers.ts`): load with the
-  matching include, then serialize:
-
-  ```ts
-  const row = await prisma.groupBuy.findUnique({ where: { id }, include: groupBuyDetailInclude });
-  return { groupBuy: toGroupBuyDetail(row, authUser(request).id, config.depositAmountCents) };
-  ```
-
-  Others: `toGroupBuySummary` + `groupBuySummaryInclude`, `toBid` +
-  `bidInclude`, `toParticipant` + `participantInclude`, `toEvent`,
-  `toDepositSummary`, `committedLbsX100`. An unknown status string in the DB
-  throws instead of being passed through.
-- **Events:** write them with `recordEvent(tx, { groupBuyId, actorUserId, eventType, payload })`
-  (`apps/api/src/lib/events.ts`). The payload holds ids, statuses, quantities and
-  reasons only, never contact details or secrets.
+Apply the additive migrations with `npm run db:deploy -w @curbstand/api`, or
+rebuild the local Docker API with `npm run server:up` (migrations run on startup).
+No existing records are deleted. Payments remain simulated deposit intents.
 
 ## Adding routes (Tasks 3 and 4)
 
