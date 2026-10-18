@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => { await page.addInitScript(() => localStorage.setItem('curbstand.welcomed', '1')); });
+
 async function login(page: Page, email: string) {
   await page.goto('/login');
   await page.getByLabel('Email', { exact: true }).fill(email);
@@ -8,43 +10,30 @@ async function login(page: Page, email: string) {
   await expect(page).toHaveURL(/\/$/);
 }
 
-test('customer and producer can complete a group buy', async ({ page }) => {
-  await login(page, 'maya@curbstand.test');
+test('producer publishes a fixed price and buyers confirm the drop at the minimum', async ({ page }) => {
+  await login(page, 'elena@curbstand.test');
   await page.goto('/group-buys/new');
-  await page.getByLabel('Target (lb)').fill('18');
-  await page.getByRole('button', { name: 'Create group buy' }).click();
+  await page.getByLabel('Minimum commitment (lb)').fill('18');
+  await page.getByLabel('Price per pound ($)').fill('1.25');
+  await page.getByRole('button', { name: 'Publish drop' }).click();
   await expect(page).toHaveURL(/\/group-buys\/[\da-f-]+$/);
   const detailUrl = page.url();
-  await page.getByLabel('Pounds', { exact: true }).fill('18');
-  await page.getByRole('button', { name: 'Join', exact: true }).click();
-  await expect(page.getByText('18 of 18 lb')).toBeVisible();
-  await page.getByRole('button', { name: 'Confirm deposit manually' }).click();
-  await expect(page.locator('.people').getByText(/confirmed manually/)).toBeVisible();
-
-  await login(page, 'elena@curbstand.test');
-  await page.goto('/you');
-  await expect(page.getByRole('heading', { name: 'Open requests' })).toBeVisible();
-  await page.goto(detailUrl);
-  await page.getByLabel('Price per lb', { exact: true }).fill('1.25');
-  await page.getByLabel('Available pounds', { exact: true }).fill('20');
-  await page.getByRole('button', { name: 'Place bid', exact: true }).click();
-  await expect(page.locator('.bids').getByText('$1.25 / lb')).toBeVisible();
-
+  await expect(page.locator('.drop-schedule')).toContainText('Proposed drop');
   await login(page, 'maya@curbstand.test');
   await page.goto(detailUrl);
-  await page.getByRole('button', { name: 'Select', exact: true }).click();
-  await expect(page.getByText('Matched', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Purchase', exact: true }).click();
+  await page.getByLabel('Pounds', { exact: true }).fill('18');
+  await expect(page.locator('.commit-total')).toHaveText('Order total: $22.50');
+  await page.getByRole('button', { name: 'Skip for now' }).click();
+  await expect(page.locator('.drop-schedule')).toContainText('Drop confirmed');
+  await expect(page.getByText('18 of 18 lb')).toBeVisible();
+  await page.reload();
+  await expect(page.locator('.drop-schedule')).toContainText('Drop confirmed');
   await login(page, 'elena@curbstand.test');
   await page.goto(detailUrl);
   await page.getByRole('button', { name: 'Mark ready for pickup' }).click();
-  await expect(page.getByText('Ready for pickup', { exact: true })).toBeVisible();
-  await expect(page.getByText(/QR check-in is unavailable/)).toBeVisible();
   await page.getByRole('button', { name: 'Confirm manual pickup' }).click();
   await expect(page.getByText('Completed', { exact: true })).toBeVisible();
-  await page.reload();
-  await expect(page.getByText('Pickup: Completed', { exact: true })).toBeVisible();
-  await page.goto('/you');
-  await expect(page.locator('.listing-grid').getByRole('link', { name: /18 of 18 lb/ })).toBeVisible();
 });
 
 test('registration makes a usable demo customer and rejects invalid email', async ({ page }) => {
@@ -59,7 +48,8 @@ test('registration makes a usable demo customer and rejects invalid email', asyn
   await expect(page).toHaveURL(/\/you$/);
   await page.goto('/?produce=apples');
   await page.locator('.listing-grid').getByRole('link').click();
-  await page.getByRole('button', { name: 'Join', exact: true }).click();
+  await page.getByRole('link', { name: 'Purchase', exact: true }).click();
+  await page.getByRole('button', { name: 'Skip for now', exact: true }).click();
   await expect(page.getByText('10 of 40 lb')).toBeVisible();
 });
 
@@ -67,7 +57,7 @@ test('phone detail and producer controls fit on screen', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page, 'elena@curbstand.test');
   await page.locator('.listing-grid').getByRole('link', { name: /Tomatoes/ }).click();
-  await expect(page.getByRole('button', { name: 'Place bid' })).toBeVisible();
+  await expect(page.locator('.drop-schedule')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'artifacts/detail-mobile.png', fullPage: true });
 });
@@ -79,7 +69,7 @@ test('failed detail requests offer retry and guests return after login', async (
   await page.goto('/');
   await page.locator('.listing-grid').getByRole('link', { name: /Apples/ }).click();
   const detailUrl = page.url();
-  await page.getByRole('link', { name: 'Log in to join or place a bid' }).click();
+  await page.getByRole('link', { name: 'Log in to commit to this drop' }).click();
   await page.getByLabel('Email').fill('maya@curbstand.test');
   await page.getByLabel('Password').fill('demo');
   await page.getByRole('button', { name: 'Log in' }).click();

@@ -19,27 +19,28 @@ export async function seedDemoUsers(prisma: PrismaClient) {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
   const customers = [
-    { email: "alice@demo.curbstand.app", name: "Alice Nguyen", orgType: "individual" },
-    { email: "bob@demo.curbstand.app", name: "Bob Martinez", orgType: "individual" },
-    { email: "kitchen@demo.curbstand.app", name: "Ballard Bistro", orgType: "restaurant" },
+    { email: "alice@demo.curbstand.app", name: "Alice Nguyen", orgType: "individual", photoUrl: "/avatars/alice.svg" },
+    { email: "bob@demo.curbstand.app", name: "Bob Martinez", orgType: "individual", photoUrl: "/avatars/bob.svg" },
+    { email: "kitchen@demo.curbstand.app", name: "Ballard Bistro", orgType: "restaurant", photoUrl: "/avatars/bistro.svg" },
   ];
   for (const c of customers) {
     await prisma.user.upsert({
       where: { email: c.email },
-      update: {},
+      update: { photoUrl: c.photoUrl },
       create: { ...c, role: "customer", passwordHash },
     });
   }
 
   await prisma.user.upsert({
     where: { email: "operator@demo.curbstand.app" },
-    update: { isOperator: true },
+    update: { isOperator: true, photoUrl: "/avatars/operator.svg" },
     create: {
       email: "operator@demo.curbstand.app",
       name: "Curbstand Operator",
       role: "customer",
       orgType: "individual",
       isOperator: true,
+      photoUrl: "/avatars/operator.svg",
       passwordHash,
     },
   });
@@ -48,7 +49,9 @@ export async function seedDemoUsers(prisma: PrismaClient) {
     {
       email: "farmer.joe@demo.curbstand.app",
       name: "Joe Yamamoto",
+      photoUrl: "/avatars/joe.svg",
       farmName: "Skagit Valley Growers",
+      producerType: "local_farmer",
       serviceRadiusMiles: 80,
       farmLatitude: 48.4232,
       farmLongitude: -122.3343,
@@ -57,7 +60,9 @@ export async function seedDemoUsers(prisma: PrismaClient) {
     {
       email: "farmer.maria@demo.curbstand.app",
       name: "Maria Lopez",
+      photoUrl: "/avatars/maria.svg",
       farmName: "Yakima Orchard Co.",
+      producerType: "large_scale_farmer",
       serviceRadiusMiles: 160,
       farmLatitude: 46.6021,
       farmLongitude: -120.5059,
@@ -66,17 +71,19 @@ export async function seedDemoUsers(prisma: PrismaClient) {
     {
       email: "farmer.sam@demo.curbstand.app",
       name: "Sam Okafor",
+      photoUrl: "/avatars/okafor.svg",
       farmName: "Snoqualmie Greens",
+      producerType: "at_home",
       serviceRadiusMiles: 40,
       farmLatitude: 47.6493,
       farmLongitude: -121.9087,
       produceTypes: ["lettuce", "kale", "tomatoes"],
     },
   ];
-  for (const { produceTypes, farmName, serviceRadiusMiles, farmLatitude, farmLongitude, ...u } of producers) {
+  for (const { produceTypes, farmName, producerType, serviceRadiusMiles, farmLatitude, farmLongitude, ...u } of producers) {
     await prisma.user.upsert({
       where: { email: u.email },
-      update: {},
+      update: { photoUrl: u.photoUrl, producerProfile: { update: { producerType } } },
       create: {
         ...u,
         role: "producer",
@@ -84,6 +91,7 @@ export async function seedDemoUsers(prisma: PrismaClient) {
         producerProfile: {
           create: {
             farmName,
+            producerType,
             serviceRadiusMiles,
             farmLatitude,
             farmLongitude,

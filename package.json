@@ -30,6 +30,7 @@
     "server:up": "docker compose up --build --detach --wait",
     "server:down": "docker compose down",
     "server:logs": "docker compose logs --follow api",
-    "server:seed": "docker compose exec api npm run db:seed"
+    "server:seed": "docker compose exec api npm run db:seed",
+    "test:integration": "npm run server:up && npm run test:live --prefix web"
   }
 }

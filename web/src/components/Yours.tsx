@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listMine, listGroupBuys } from "../lib/data";
+import { listMine } from "../lib/data";
 import { actionError } from "../lib/api-error";
 import { clearSession, type Session } from "../lib/session";
 import type { Catalog, GroupBuySummary } from "../lib/types";
@@ -8,22 +8,18 @@ import ListingCard from "./ListingCard";
 export default function Yours({ catalog, session }: { catalog: Catalog | null; session: Session | null }) {
   const [created, setCreated] = useState<GroupBuySummary[] | null>(null);
   const [joined, setJoined] = useState<GroupBuySummary[] | null>(null);
-  const [bids, setBids] = useState<GroupBuySummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [available, setAvailable] = useState<GroupBuySummary[] | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!session?.id) return;
     let active = true;
     setError(null);
-    Promise.all([listMine(session.id), session.role === "producer" ? listGroupBuys({}) : Promise.resolve([])])
-      .then(([mine, rows]) => {
+    listMine(session.id)
+      .then((mine) => {
         if (!active) return;
         setCreated(mine.created);
         setJoined(mine.joined);
-        setBids(mine.bids);
-        setAvailable(rows.filter((row) => ["open", "funding"].includes(row.status) && new Date(row.bidDeadline) > new Date()));
       })
       .catch((reason) => { if (active) setError(actionError(reason)); });
     return () => { active = false; };
@@ -37,8 +33,8 @@ export default function Yours({ catalog, session }: { catalog: Catalog | null; s
   if (!session) {
     return (
       <div className="form-panel">
-        <h1>Your group buys</h1>
-        <p>Log in to see group buys you created, joined, or bid on.</p>
+        <h1>Your drops</h1>
+        <p>Log in to see group buys you published or committed to.</p>
         <a className="button" href="/login">Log in</a>
       </div>
     );
@@ -46,7 +42,7 @@ export default function Yours({ catalog, session }: { catalog: Catalog | null; s
 
   return (
     <div className="yours">
-      <h1 className="page-title">Your group buys</h1>
+      <h1 className="page-title">Your drops</h1>
       <div className="actions pad-x">
         <button className="text-button" type="button" onClick={logout}>Log out</button>
         <button className="text-button" type="button" onClick={() => setAttempt((value) => value + 1)}>Refresh</button>
@@ -58,8 +54,8 @@ export default function Yours({ catalog, session }: { catalog: Catalog | null; s
       <Section title="Joined" rows={session.id ? joined : []} produce={catalog?.produce ?? []} />
       </> : null}
       {!error && session.role === "producer" ? <>
-      <Section title="Bids" rows={session.id ? bids : []} produce={catalog?.produce ?? []} />
-      <Section title="Open requests" rows={available} produce={catalog?.produce ?? []} />
+      <a className="button" href="/group-buys/new">Create a drop</a>
+      <Section title="Your published drops" rows={session.id ? created : []} produce={catalog?.produce ?? []} />
       </> : null}
     </div>
   );

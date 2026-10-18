@@ -12,14 +12,14 @@ export default function CreateGroupBuy({ catalog, session }: { catalog: Catalog 
   const [pickupStart, setPickupStart] = useState(pacificInputValue(7, 9));
   const [pickupEnd, setPickupEnd] = useState(pacificInputValue(7, 11));
   const [joinDeadline, setJoinDeadline] = useState(pacificInputValue(5, 17));
-  const [bidDeadline, setBidDeadline] = useState(pacificInputValue(6, 17));
+  const [price, setPrice] = useState("2.50");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const selectedLocation = locationId || catalog?.locations[0]?.id || "";
 
   if (!catalog) return <p className="status-line">Loading</p>;
-  if (session?.role === "producer") return <div className="form-panel"><h1>Find a group buy to supply</h1><p>Customers create requests. As a producer, you can browse requests and place a bid.</p><a className="button" href="/you">View open requests</a></div>;
+  if (session?.role === "customer") return <div className="form-panel"><h1>Producer account required</h1><p>Producers publish drops with a fixed price and minimum order.</p><a className="button" href="/">Back to produce</a></div>;
 
   async function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,7 +31,9 @@ export default function CreateGroupBuy({ catalog, session }: { catalog: Catalog 
     const pickupWindowStart = pacificInputToIso(pickupStart);
     const pickupWindowEnd = pacificInputToIso(pickupEnd);
     const join = pacificInputToIso(joinDeadline);
-    const bid = pacificInputToIso(bidDeadline);
+    const bid = pickupWindowStart;
+    const pricePerLb = Number(price);
+    if (!Number.isFinite(pricePerLb) || pricePerLb <= 0 || !/^\d+(\.\d{1,2})?$/.test(price)) { setMessage("Enter a positive price with at most two decimal places."); return; }
     if (!pickupWindowStart || !pickupWindowEnd || !join || !bid) {
       setMessage("Enter each date and time.");
       return;
@@ -51,6 +53,7 @@ export default function CreateGroupBuy({ catalog, session }: { catalog: Catalog 
       const created = await createGroupBuy({
         produceType,
         targetLbs,
+        pricePerLb,
         pickupLocationId: selectedLocation,
         pickupWindowStart,
         pickupWindowEnd,
@@ -66,9 +69,9 @@ export default function CreateGroupBuy({ catalog, session }: { catalog: Catalog 
 
   return (
     <form className="form-panel" onSubmit={submit} noValidate>
-      <h1>Create a group buy</h1>
-      {!session ? <p className="hint"><a className="inline-link" href="/login?next=/group-buys/new">Log in</a> to publish your group buy.</p> : null}
-      <p className="hint">Times are Pacific. The bid deadline has to fall before pickup starts.</p>
+      <h1>Create a drop</h1>
+      {!session ? <p className="hint"><a className="inline-link" href="/login?next=/group-buys/new">Log in</a> to publish your drop.</p> : null}
+      <p className="hint">Set your price and minimum. The proposed pickup date confirms automatically when the minimum is reached. Times are Pacific.</p>
       {message ? <p className="alert" role="alert">{message}</p> : null}
       <label className="field" htmlFor="produce">
         <span>Produce</span>
@@ -77,7 +80,7 @@ export default function CreateGroupBuy({ catalog, session }: { catalog: Catalog 
         </select>
       </label>
       <label className="field" htmlFor="target">
-        <span>Target (lb)</span>
+        <span>Minimum commitment (lb)</span>
         <input id="target" inputMode="decimal" value={target} onChange={(event) => setTarget(event.target.value)} />
       </label>
       <label className="field" htmlFor="location">
@@ -98,11 +101,8 @@ export default function CreateGroupBuy({ catalog, session }: { catalog: Catalog 
         <span>Join deadline</span>
         <input id="join-deadline" type="datetime-local" value={joinDeadline} onChange={(event) => setJoinDeadline(event.target.value)} />
       </label>
-      <label className="field" htmlFor="bid-deadline">
-        <span>Bid deadline</span>
-        <input id="bid-deadline" type="datetime-local" value={bidDeadline} onChange={(event) => setBidDeadline(event.target.value)} />
-      </label>
-      <button className="button" type="submit" disabled={busy}>Create group buy</button>
+      <label className="field" htmlFor="price"><span>Price per pound ($)</span><input id="price" inputMode="decimal" value={price} onChange={event => setPrice(event.target.value)} /></label>
+      <button className="button" type="submit" disabled={busy}>Publish drop</button>
     </form>
   );
 }

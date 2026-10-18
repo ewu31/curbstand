@@ -2,15 +2,18 @@ import { demoUsers } from "./demo-accounts";
 import { readSession } from "./session";
 import { ApiError } from "./api-error";
 import { createFixtureDetails, fixtureLocations, fixtureProduce, toSummary } from "./fixtures";
-import type { BidInput, Catalog, CreateGroupBuyInput, DepositStatus, GroupBuyDetail, Mine, PickupLocation, Role } from "./types";
+import type { Catalog, CreateGroupBuyInput, DepositStatus, GroupBuyDetail, Mine, PickupLocation, Role } from "./types";
 
-const STORAGE_KEY = "curbstand.fixture-db";
+const STORAGE_KEY = "curbstand.drops.v2";
 const IN_PROGRESS = new Set(["open", "funding", "matched", "ready_for_pickup"]);
 
 type FixtureDb = { groupBuys: GroupBuyDetail[] };
 
 function readDb(): FixtureDb {
-  const base = { groupBuys: createFixtureDetails() };
+  const base = { groupBuys: createFixtureDetails().map(row => ({ ...row,
+    status: row.committedLbs >= row.targetLbs && ["open", "funding"].includes(row.status) ? "matched" as const : row.status,
+    events: row.events.filter(event => !event.eventType.startsWith("bid")), bids: [],
+  })) };
   if (typeof sessionStorage === "undefined") return base;
   const raw = sessionStorage.getItem(STORAGE_KEY);
   if (!raw) return base;
@@ -62,7 +65,7 @@ export function getGroupBuy(id: string) {
 }
 
 export function createGroupBuy(input: CreateGroupBuyInput, userId: string | null) {
-  requireAccount(userId, "customer");
+  const account = requireAccount(userId, "producer");
   const start = new Date(input.pickupWindowStart);
   const end = new Date(input.pickupWindowEnd);
   const join = new Date(input.joinDeadline);
@@ -77,6 +80,8 @@ export function createGroupBuy(input: CreateGroupBuyInput, userId: string | null
     id: crypto.randomUUID(),
     produceType: input.produceType,
     targetLbs: input.targetLbs,
+    pricePerLb: input.pricePerLb,
+    seller: { id: account.id, name: account.name, photoUrl: "photoUrl" in account ? account.photoUrl : "/avatars/guest.svg", producerType: ("producerType" in account ? account.producerType : undefined) ?? "local_farmer" },
     committedLbs: 0,
     remainingLbs: input.targetLbs,
     status: "open",
@@ -127,7 +132,7 @@ export function joinGroupBuy(id: string, requestedLbs: number, userId: string | 
   groupBuy.participants.push(participant);
   groupBuy.committedLbs += requestedLbs;
   groupBuy.remainingLbs = Math.max(groupBuy.targetLbs - groupBuy.committedLbs, 0);
-  if (groupBuy.status === "open") groupBuy.status = "funding";
+  groupBuy.status = groupBuy.committedLbs >= groupBuy.targetLbs ? "matched" : "funding";
   groupBuy.updatedAt = now;
   groupBuy.events.unshift({
     id: crypto.randomUUID(),
@@ -139,74 +144,6 @@ export function joinGroupBuy(id: string, requestedLbs: number, userId: string | 
   return Promise.resolve(participant);
 }
 
-export function placeBid(id: string, input: BidInput, userId: string | null) {
-  requireAccount(userId, "producer");
-  const db = readDb();
-  const groupBuy = db.groupBuys.find((item) => item.id === id);
-  if (!groupBuy) throw new ApiError(404, "NOT_FOUND", "Group buy not found");
-  if (!["open", "funding"].includes(groupBuy.status) || new Date() > new Date(groupBuy.bidDeadline)) {
-    throw new ApiError(409, "BIDDING_CLOSED", "This group buy is no longer accepting bids");
-  }
-  const start = new Date(input.availabilityWindowStart);
-  const end = new Date(input.availabilityWindowEnd);
-  if (start > new Date(groupBuy.pickupWindowStart) || end < new Date(groupBuy.pickupWindowEnd) || start >= end) {
-    throw new ApiError(400, "INVALID_AVAILABILITY", "Producer availability must cover the pickup window");
-  }
-  const now = new Date().toISOString();
-  const bid = {
-    id: crypto.randomUUID(),
-    groupBuyId: id,
-    producerId: userId!,
-    pricePerLb: input.pricePerLb,
-    availableLbs: input.availableLbs,
-    availabilityWindowStart: input.availabilityWindowStart,
-    availabilityWindowEnd: input.availabilityWindowEnd,
-    notes: input.notes ?? null,
-    status: "submitted" as const,
-    createdAt: now,
-  };
-  groupBuy.bids.push(bid);
-  groupBuy.bids.sort((a, b) => a.pricePerLb - b.pricePerLb);
-  groupBuy.updatedAt = now;
-  groupBuy.events.unshift({ id: crypto.randomUUID(), eventType: "bid_submitted", createdAt: now, payload: { bidId: bid.id } });
-  writeDb(db);
-  return Promise.resolve(bid);
-}
-
-export function selectBid(id: string, bidId: string, userId: string | null) {
-  const actor = requireAccount(userId);
-  const db = readDb();
-  const groupBuy = db.groupBuys.find((item) => item.id === id);
-  if (!groupBuy) throw new ApiError(404, "NOT_FOUND", "Group buy not found");
-  if (groupBuy.createdBy !== actor.id) throw new ApiError(403, "FORBIDDEN", "Only the request owner can select a bid");
-  if (groupBuy.status !== "funding" || new Date() > new Date(groupBuy.bidDeadline)) {
-    throw new ApiError(409, "MATCHING_CLOSED", "This group buy cannot be matched");
-  }
-  if (groupBuy.selectedBidId) throw new ApiError(409, "ALREADY_MATCHED", "A bid has already been selected");
-  const bid = groupBuy.bids.find((item) => item.id === bidId);
-  if (!bid) throw new ApiError(404, "NOT_FOUND", "Bid not found");
-  if (bid.availableLbs < groupBuy.committedLbs) throw new ApiError(409, "INSUFFICIENT_QUANTITY", "The bid must cover all committed pounds");
-  if (groupBuy.committedLbs < groupBuy.targetLbs) {
-    throw new ApiError(409, "THRESHOLD_NOT_MET", "The committed quantity has not reached the target");
-  }
-  const now = new Date().toISOString();
-  for (const item of groupBuy.bids) {
-    if (item.status === "submitted") item.status = "rejected";
-  }
-  bid.status = "selected";
-  groupBuy.selectedBidId = bid.id;
-  groupBuy.status = "matched";
-  groupBuy.updatedAt = now;
-  groupBuy.events.unshift({
-    id: crypto.randomUUID(),
-    eventType: "bid_selected",
-    createdAt: now,
-    payload: { bidId: bid.id, status: "matched" },
-  });
-  writeDb(db);
-  return Promise.resolve({ groupBuyId: id, selectedBidId: bid.id, status: "matched" });
-}
-
 export function updateStatus(id: string, status: "cancelled" | "ready_for_pickup", userId: string | null) {
   const actor = requireAccount(userId, status === "ready_for_pickup" ? "producer" : undefined);
   const db = readDb();
@@ -214,7 +151,7 @@ export function updateStatus(id: string, status: "cancelled" | "ready_for_pickup
   if (!groupBuy) throw new ApiError(404, "NOT_FOUND", "Group buy not found");
   const isOwner = groupBuy.createdBy === actor.id;
   const canCancel = status === "cancelled" && isOwner && ["open", "funding"].includes(groupBuy.status);
-  const canReady = status === "ready_for_pickup" && actor.role === "producer" && groupBuy.status === "matched" && groupBuy.bids.some((bid) => bid.id === groupBuy.selectedBidId && bid.producerId === actor.id);
+  const canReady = status === "ready_for_pickup" && actor.role === "producer" && groupBuy.status === "matched" && isOwner;
   if (!canCancel && !canReady) throw new ApiError(403, "FORBIDDEN", "User cannot make this status change");
   const now = new Date().toISOString();
   const previous = groupBuy.status;
@@ -264,7 +201,7 @@ export async function completePickup(id: string, participantId: string, userId: 
   if (!groupBuy) throw new ApiError(404, "NOT_FOUND", "Group buy not found");
   const person = groupBuy.participants.find((item) => item.id === participantId);
   if (!person) throw new ApiError(404, "NOT_FOUND", "Participant not found");
-  const producer = groupBuy.bids.find((bid) => bid.id === groupBuy.selectedBidId)?.producerId;
+  const producer = groupBuy.createdBy;
   if (actor.id !== person.userId && actor.id !== producer) throw new ApiError(403, "FORBIDDEN", "Only the participant or selected producer can confirm pickup");
   if (person.completionStatus === "completed") return;
   if (groupBuy.status !== "ready_for_pickup") throw new ApiError(409, "NOT_READY", "Wait until the producer marks this group buy ready");

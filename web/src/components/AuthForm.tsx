@@ -1,7 +1,8 @@
-import { useState, type SubmitEvent } from "react";
+import { useEffect, useState, type SubmitEvent } from "react";
 import { matchDemoAccount } from "../lib/demo-accounts";
 import { writeSession, readDemoAccounts, type Session } from "../lib/session";
 import type { Role } from "../lib/types";
+import { login as apiLogin, signup, getCatalog } from "../lib/api";
 import { isDemo } from "../lib/data";
 
 export default function AuthForm({ mode }: { mode: "login" | "register" }) {
@@ -9,6 +10,18 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("customer");
+  const [producerType, setProducerType] = useState<NonNullable<Session["producerType"]>>("local_farmer");
+  const [farmName, setFarmName] = useState("");
+  const [produceTypes, setProduceTypes] = useState<string[]>([]);
+  const [catalog, setCatalog] = useState<{ slug: string; displayName: string }[]>([]);
+  const [radius, setRadius] = useState("80");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [orgType, setOrgType] = useState<"individual" | "restaurant">("individual");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!isDemo && mode === "register") getCatalog().then(c => setCatalog(c.produce)).catch(() => setMessage("Could not load produce types. Refresh to try again."));
+  }, [mode]);
   const [message, setMessage] = useState<string | null>(null);
 
   function finish(session: Session) {
@@ -17,7 +30,7 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
     window.location.assign(next?.startsWith("/") && !next.startsWith("//") && !next.includes("\\") ? next : mode === "login" ? "/" : "/you");
   }
 
-  function submit(event: SubmitEvent<HTMLFormElement>) {
+  async function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setMessage("Enter a valid email address.");
@@ -25,6 +38,19 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
     }
     if (!password.trim()) {
       setMessage("Enter a password.");
+      return;
+    }
+    if (!isDemo) {
+      setBusy(true);
+      setMessage(null);
+      try {
+        const common = { email: email.trim(), password, name: name.trim() };
+        const result = mode === "login" ? await apiLogin(common.email, password) : await signup(role === "customer"
+          ? { ...common, role, orgType }
+          : { ...common, role, farmName, producerType, produceTypes, serviceRadiusMiles: Number(radius), farmLatitude: latitude.trim() ? Number(latitude) : NaN, farmLongitude: longitude.trim() ? Number(longitude) : NaN });
+        finish({ id: result.user.id, name: result.user.name, email: result.user.email, role: result.user.role, token: result.token, producerType: result.user.producerProfile?.producerType, photoUrl: result.user.photoUrl || "/avatars/guest.svg", localOnly: false });
+      } catch (error) { setMessage(error instanceof Error ? error.message : "Could not sign in."); }
+      finally { setBusy(false); }
       return;
     }
     const demo = matchDemoAccount(email);
@@ -38,7 +64,7 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
         setMessage("No seeded account uses that email.");
         return;
       }
-      finish({ id: demo.id, name: demo.name, email: demo.email, role: demo.role, localOnly: false });
+      finish({ id: demo.id, name: demo.name, email: demo.email, role: demo.role, photoUrl: demo.photoUrl, localOnly: false });
       return;
     }
     if (!name.trim()) {
@@ -46,14 +72,14 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
       return;
     }
     if (demo) {
-      finish({ id: demo.id, name: demo.name, email: demo.email, role: demo.role, localOnly: false });
+      finish({ id: demo.id, name: demo.name, email: demo.email, role: demo.role, photoUrl: demo.photoUrl, localOnly: false });
       return;
     }
     if (!isDemo) {
       setMessage("Registration is not available on the API yet. Log in with a demo account to continue.");
       return;
     }
-    finish({ id: crypto.randomUUID(), name: name.trim(), email: email.trim(), role, localOnly: true });
+    finish({ id: crypto.randomUUID(), name: name.trim(), email: email.trim(), role, producerType: role === "producer" ? producerType : undefined, photoUrl: "/avatars/guest.svg", localOnly: true });
   }
 
   const login = mode === "login";
@@ -85,9 +111,18 @@ export default function AuthForm({ mode }: { mode: "login" | "register" }) {
             </div>
           </fieldset>
         )}
-        <p className="hint">Demo accounts: maya@curbstand.test and jordan@curbstand.test (customers), elena@curbstand.test (producer). Use any password; this demo does not verify passwords.</p>
-        {!login ? <p className="hint">{isDemo ? "New demo accounts work in this browser session only." : "New account registration is awaiting backend support. Use a demo account to explore."}</p> : null}
-        <button className="button" type="submit">{login ? "Log in" : "Create account"}</button>
+        {!login && !isDemo && role === "customer" ? <label className="field"><span>Account type</span><select value={orgType} onChange={e => setOrgType(e.target.value as typeof orgType)}><option value="individual">Individual</option><option value="restaurant">Restaurant</option></select></label> : null}
+        {!login && role === "producer" ? <label className="field"><span>Producer type</span><select value={producerType} onChange={e => setProducerType(e.target.value as typeof producerType)}><option value="at_home">At home</option><option value="local_farmer">Local farmer</option><option value="large_scale_farmer">Large scale farmer</option></select></label> : null}
+        {!login && !isDemo && role === "producer" ? <>
+          <label className="field"><span>Farm name</span><input value={farmName} onChange={e => setFarmName(e.target.value)} /></label>
+          <fieldset className="choices"><legend>Produce you grow</legend>{catalog.map(p => <label key={p.slug}><input type="checkbox" checked={produceTypes.includes(p.slug)} onChange={e => setProduceTypes(e.target.checked ? [...produceTypes, p.slug] : produceTypes.filter(id => id !== p.slug))} />{p.displayName}</label>)}</fieldset>
+          <label className="field"><span>Service radius (miles, 1–250)</span><input type="number" min="1" max="250" value={radius} onChange={e => setRadius(e.target.value)} /></label>
+          <label className="field"><span>Farm latitude</span><input type="number" step="any" min="-90" max="90" value={latitude} onChange={e => setLatitude(e.target.value)} /></label>
+          <label className="field"><span>Farm longitude</span><input type="number" step="any" min="-180" max="180" value={longitude} onChange={e => setLongitude(e.target.value)} /></label>
+        </> : null}
+        <p className="hint">{isDemo ? "Demo accounts: maya@curbstand.test and jordan@curbstand.test (customers), elena@curbstand.test (producer). Use any password; this demo does not verify passwords." : "Seeded accounts: alice@demo.curbstand.app (customer), farmer.joe@demo.curbstand.app (producer). Password: password123."}</p>
+        {!login ? <p className="hint">{isDemo ? "New demo accounts work in this browser session only." : "Use a password with at least 8 characters."}</p> : null}
+        <button className="button" type="submit" disabled={busy}>{busy ? "Please wait…" : login ? "Log in" : "Create account"}</button>
         <p className="switch-auth">
           {login ? <a className="inline-link" href="/register">Create account</a> : <a className="inline-link" href="/login">Log in</a>}
         </p>

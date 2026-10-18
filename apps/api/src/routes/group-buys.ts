@@ -1,17 +1,12 @@
 import {
   canTransitionGroupBuy,
-  createBidSchema,
   createGroupBuySchema,
   hundredthsToLbs,
   joinGroupBuySchema,
   listGroupBuysQuerySchema,
-  producerEligibility,
-  selectBidSchema,
   updateGroupBuyStatusSchema,
-  type BidResponse,
   type GroupBuyResponse,
   type GroupBuyStatus,
-  type ListBidsResponse,
   type ListGroupBuysResponse,
   type ParticipantResponse,
 } from "@curbstand/shared";
@@ -22,12 +17,10 @@ import { prisma } from "../lib/db";
 import { badRequest, conflict, deadlinePassed, forbidden, HttpError, invalidTransition, notFound } from "../lib/errors";
 import { recordEvent } from "../lib/events";
 import {
-  bidInclude,
   committedLbsX100,
   groupBuyDetailInclude,
   groupBuySummaryInclude,
   participantInclude,
-  toBid,
   toGroupBuyDetail,
   toGroupBuySummary,
   toParticipant,
@@ -66,19 +59,21 @@ const routes: FastifyPluginAsync = async (app) => {
     return { groupBuys: rows.map(toGroupBuySummary) };
   });
 
-  app.post("/group-buys", { preHandler: requireCustomer }, async (request, reply): Promise<GroupBuyResponse> => {
+  app.post("/group-buys", { preHandler: requireProducer }, async (request, reply): Promise<GroupBuyResponse> => {
     const user = authUser(request);
     const input = createGroupBuySchema.parse(request.body);
+    if (input.joinDeadline <= new Date()) throw badRequest("Commitment deadline must be in the future");
     const groupBuy = await prisma.$transaction(async (tx) => {
       const created = await tx.groupBuy.create({
         data: {
           produceTypeId: input.produceType,
           targetLbsX100: input.targetLbs,
+          priceCentsPerLb: input.pricePerLbUsd,
           pickupLocationId: input.pickupLocationId,
           pickupWindowStart: input.pickupWindowStart,
           pickupWindowEnd: input.pickupWindowEnd,
           joinDeadline: input.joinDeadline,
-          bidDeadline: input.bidDeadline,
+          bidDeadline: input.joinDeadline,
           createdById: user.id,
         },
       });
@@ -114,6 +109,7 @@ const routes: FastifyPluginAsync = async (app) => {
           status: groupBuy.status,
         });
       }
+      if (groupBuy.priceCentsPerLb == null) throw conflict("This legacy request has no fixed seller price and cannot accept commitments");
       if (new Date() > groupBuy.joinDeadline) throw deadlinePassed("join", groupBuy.joinDeadline);
 
       const existing = await prisma.groupBuyParticipant.findUnique({
@@ -140,15 +136,14 @@ const routes: FastifyPluginAsync = async (app) => {
           },
           include: participantInclude,
         });
-        if (groupBuy.status === "open") {
-          await tx.groupBuy.update({ where: { id: groupBuy.id }, data: { status: "funding" } });
-          await recordEvent(tx, {
-            groupBuyId: groupBuy.id,
-            actorUserId: user.id,
-            eventType: "group_buy.status_changed",
-            payload: { from: "open", to: "funding" },
-          });
-        }
+        const committed = committedLbsX100(await tx.groupBuyParticipant.findMany({ where: { groupBuyId: groupBuy.id }, select: { requestedLbsX100: true } }));
+        const status = committed >= groupBuy.targetLbsX100 ? "matched" : "funding";
+        const changed = await tx.groupBuy.updateMany({ where: { id: groupBuy.id, status: { in: ACCEPTING }, joinDeadline: { gt: new Date() } }, data: { status } });
+        if (!changed.count) throw conflict("This drop has closed; refresh and retry");
+        if (status !== groupBuy.status) await recordEvent(tx, {
+          groupBuyId: groupBuy.id, actorUserId: user.id, eventType: "group_buy.status_changed",
+          payload: { from: groupBuy.status, to: status, pickupWindowStart: groupBuy.pickupWindowStart.toISOString() },
+        });
         await recordEvent(tx, {
           groupBuyId: groupBuy.id,
           actorUserId: user.id,
@@ -162,126 +157,10 @@ const routes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  app.post<IdParams>(
-    "/group-buys/:id/bids",
-    { preHandler: requireProducer },
-    async (request, reply): Promise<BidResponse> => {
-      const user = authUser(request);
-      const input = createBidSchema.parse(request.body);
-      const groupBuy = await prisma.groupBuy.findUnique({
-        where: { id: request.params.id },
-        include: { pickupLocation: true },
-      });
-      if (!groupBuy) throw notFound("Group buy not found");
-
-      const profile = await prisma.producerProfile.findUnique({
-        where: { userId: user.id },
-        include: { produceTypes: { select: { produceTypeId: true } } },
-      });
-      if (!profile) throw forbidden("Producer profile is missing");
-      const eligibility = producerEligibility(
-        { ...profile, produceTypes: profile.produceTypes.map((t) => t.produceTypeId) },
-        groupBuy,
-      );
-      if (!eligibility.eligible) {
-        throw new HttpError("NOT_ELIGIBLE", "You are not eligible to bid on this group buy", {
-          reasons: eligibility.reasons,
-          distanceMiles: eligibility.distanceMiles,
-          serviceRadiusMiles: profile.serviceRadiusMiles,
-        });
-      }
-      if (!ACCEPTING.includes(groupBuy.status as GroupBuyStatus)) {
-        throw new HttpError("GROUP_BUY_CLOSED", "This group buy is no longer accepting bids", { status: groupBuy.status });
-      }
-      if (new Date() > groupBuy.bidDeadline) throw deadlinePassed("bid", groupBuy.bidDeadline);
-      if (input.availabilityWindowStart > groupBuy.pickupWindowStart || input.availabilityWindowEnd < groupBuy.pickupWindowEnd) {
-        throw badRequest("Producer availability must cover the pickup window", [
-          { path: "availabilityWindowStart", message: "Must cover the pickup window" },
-        ]);
-      }
-
-      const bid = await prisma.$transaction(async (tx) => {
-        const created = await tx.bid.create({
-          data: {
-            groupBuyId: groupBuy.id,
-            producerId: user.id,
-            priceCentsPerLb: input.pricePerLbUsd,
-            availableLbsX100: input.availableLbs,
-            availabilityWindowStart: input.availabilityWindowStart,
-            availabilityWindowEnd: input.availabilityWindowEnd,
-            notes: input.notes ?? null,
-          },
-          include: bidInclude,
-        });
-        await recordEvent(tx, {
-          groupBuyId: groupBuy.id,
-          actorUserId: user.id,
-          eventType: "bid.submitted",
-          payload: { bidId: created.id },
-        });
-        return created;
-      });
-      reply.status(201);
-      return { bid: toBid(bid) };
-    },
-  );
-
-  app.get<IdParams>("/group-buys/:id/bids", async (request): Promise<ListBidsResponse> => {
-    const bids = await prisma.bid.findMany({
-      where: { groupBuyId: request.params.id },
-      include: bidInclude,
-      orderBy: [{ priceCentsPerLb: "asc" }, { createdAt: "asc" }],
-    });
-    return { bids: bids.map(toBid) };
-  });
-
-  app.post<IdParams>("/group-buys/:id/select-bid", { preHandler: requireAuth }, async (request) => {
-    const user = authUser(request);
-    const groupBuy = await prisma.groupBuy.findUnique({ where: { id: request.params.id } });
-    if (!groupBuy) throw notFound("Group buy not found");
-    if (groupBuy.createdById !== user.id) throw forbidden("Only the request owner can select a bid");
-    if (groupBuy.selectedBidId) throw new HttpError("ALREADY_MATCHED", "A bid has already been selected");
-    if (groupBuy.status !== "funding") throw invalidTransition(groupBuy.status, "matched");
-    if (new Date() > groupBuy.bidDeadline) throw deadlinePassed("bid", groupBuy.bidDeadline);
-
-    const { bidId } = selectBidSchema.parse(request.body);
-    const bid = await prisma.bid.findFirst({ where: { id: bidId, groupBuyId: groupBuy.id } });
-    if (!bid) throw notFound("Bid not found");
-
-    const committed = await committedFor(groupBuy.id);
-    if (committed < groupBuy.targetLbsX100) {
-      throw new HttpError("THRESHOLD_NOT_MET", "The committed quantity has not reached the target", {
-        committedLbs: hundredthsToLbs(committed),
-        targetLbs: hundredthsToLbs(groupBuy.targetLbsX100),
-      });
-    }
-
-    await prisma.$transaction(async (tx) => {
-      // Conditional update so concurrent selections can only match once.
-      const { count } = await tx.groupBuy.updateMany({
-        where: { id: groupBuy.id, status: "funding", selectedBidId: null },
-        data: { selectedBidId: bid.id, status: "matched" },
-      });
-      if (count === 0) throw new HttpError("ALREADY_MATCHED", "A bid has already been selected");
-      await tx.bid.updateMany({
-        where: { groupBuyId: groupBuy.id, status: "submitted", id: { not: bid.id } },
-        data: { status: "not_selected" },
-      });
-      await tx.bid.update({ where: { id: bid.id }, data: { status: "selected" } });
-      await recordEvent(tx, {
-        groupBuyId: groupBuy.id,
-        actorUserId: user.id,
-        eventType: "bid.selected",
-        payload: { bidId: bid.id, from: "funding", to: "matched" },
-      });
-    });
-    return loadDetail(groupBuy.id, user.id);
-  });
-
   /**
    * Manual transitions:
    *  - cancelled: the owner while open/funding, or an operator from any cancellable status
-   *  - ready_for_pickup: the producer whose bid was selected, while matched
+   *  - ready_for_pickup: the seller who published the drop, while matched
    */
   app.patch<IdParams>("/group-buys/:id/status", { preHandler: requireAuth }, async (request) => {
     const user = authUser(request);
@@ -296,7 +175,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const allowed =
       to === "cancelled"
         ? user.isOperator || (user.id === groupBuy.createdById && ACCEPTING.includes(from))
-        : user.id === groupBuy.selectedBid?.producerId;
+        : user.role === "producer" && user.id === groupBuy.createdById;
     if (!allowed) throw forbidden("You cannot make this status change");
     if (!canTransitionGroupBuy(from, to)) throw invalidTransition(from, to);
 
@@ -315,7 +194,7 @@ const routes: FastifyPluginAsync = async (app) => {
 
   /**
    * Scheduler hook: cancels open group buys past their join deadline and funding group
-   * buys past their bid deadline. Idempotent — only still-eligible rows are changed.
+   * buys past their commitment deadline. Idempotent — only still-eligible rows are changed.
    */
   app.post("/jobs/resolve-group-buys", { preHandler: requireOperator }, async (request) => {
     const user = authUser(request);
@@ -324,7 +203,7 @@ const routes: FastifyPluginAsync = async (app) => {
       where: {
         OR: [
           { status: "open", joinDeadline: { lt: now } },
-          { status: "funding", bidDeadline: { lt: now } },
+          { status: "funding", joinDeadline: { lt: now } },
         ],
       },
       select: { id: true, status: true },

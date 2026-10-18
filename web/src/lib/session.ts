@@ -5,9 +5,12 @@ const KEY = "curbstand.session";
 export type Session = {
   id: string | null;
   name: string;
+  photoUrl?: string;
+  producerType?: "at_home" | "local_farmer" | "large_scale_farmer";
   email: string;
   role: Role;
   localOnly: boolean;
+  token?: string;
 };
 
 export function readSession(): Session | null {
@@ -16,6 +19,7 @@ export function readSession(): Session | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Session;
     if (!parsed?.email || (parsed.role !== "customer" && parsed.role !== "producer")) return null;
+    if (import.meta.env.PUBLIC_DATA_SOURCE !== "fixtures" && !parsed.token) return null;
     return parsed;
   } catch {
     return null;

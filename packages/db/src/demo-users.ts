@@ -1,10 +1,12 @@
-// Keep these ids aligned with web/src/lib/demo-accounts.ts.
+// Ids stay aligned with web/src/lib/demo-accounts.ts.
+export const demoUsers = [
   {
     id: "8f0b1c2a-6d3e-4f11-9a77-111111111101",
     name: "Maya Chen",
     email: "maya@curbstand.test",
     role: "customer" as const,
     organizationType: "individual" as const,
+    photoUrl: "/avatars/maya.svg",
   },
   {
     id: "8f0b1c2a-6d3e-4f11-9a77-111111111102",
@@ -12,6 +14,7 @@
     email: "jordan@curbstand.test",
     role: "customer" as const,
     organizationType: "individual" as const,
+    photoUrl: "/avatars/jordan.svg",
   },
   {
     id: "8f0b1c2a-6d3e-4f11-9a77-111111111103",
@@ -20,6 +23,7 @@
     role: "producer" as const,
     organizationType: null,
     farmName: "Ortiz Family Farm",
+    photoUrl: "/avatars/elena.svg",
   },
 ];
 

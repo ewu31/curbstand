@@ -6,6 +6,7 @@ const email = z.email().transform((e) => e.trim().toLowerCase());
 const password = z.string().min(8, "Password must be at least 8 characters").max(128);
 const name = z.string().trim().min(1).max(100);
 const phone = z.string().trim().min(7).max(30);
+export const producerTypeSchema = z.enum(["at_home", "local_farmer", "large_scale_farmer"]);
 const farmName = z.string().trim().min(1).max(100);
 const produceTypes = z
   .array(z.enum(PRODUCE_TYPE_IDS as [string, ...string[]]))
@@ -31,6 +32,7 @@ export const producerSignupSchema = z.object({
   name,
   phone: phone.optional(),
   farmName,
+  producerType: producerTypeSchema.default("local_farmer"),
   produceTypes,
   serviceRadiusMiles,
   farmLatitude,
@@ -59,6 +61,7 @@ export const updateProducerProfileSchema = z
     name: name.optional(),
     phone: phone.nullable().optional(),
     farmName: farmName.optional(),
+    producerType: producerTypeSchema.optional(),
     produceTypes: produceTypes.optional(),
     serviceRadiusMiles: serviceRadiusMiles.optional(),
     farmLatitude: farmLatitude.optional(),
@@ -84,11 +87,13 @@ export interface UserProfile {
   name: string;
   email: string;
   phone: string | null;
+  photoUrl: string | null;
   /** Customers only; null for producers. */
   orgType: OrgType | null;
   /** Producers only; null for customers. */
   producerProfile: {
     farmName: string;
+    producerType: "at_home" | "local_farmer" | "large_scale_farmer";
     produceTypes: string[];
     serviceRadiusMiles: number;
     farmLatitude: number;

@@ -36,10 +36,12 @@ export function toUserProfile(user: UserWithProfile): UserProfile {
     name: user.name,
     email: user.email,
     phone: user.phone,
+    photoUrl: user.photoUrl,
     orgType: (user.orgType as OrgType | null) ?? null,
     producerProfile: p
       ? {
           farmName: p.farmName,
+          producerType: p.producerType as "at_home" | "local_farmer" | "large_scale_farmer",
           produceTypes: p.produceTypes.map((t) => t.produceTypeId).sort(),
           serviceRadiusMiles: p.serviceRadiusMiles,
           farmLatitude: p.farmLatitude,
@@ -69,12 +71,14 @@ export const participantInclude = {
 } satisfies Prisma.GroupBuyParticipantInclude;
 
 export const groupBuySummaryInclude = {
+  createdBy: { select: { name: true, photoUrl: true, producerProfile: { select: { farmName: true, producerType: true } } } },
   produceType: true,
   pickupLocation: true,
   participants: { select: { requestedLbsX100: true } },
 } satisfies Prisma.GroupBuyInclude;
 
 export const groupBuyDetailInclude = {
+  createdBy: { select: { name: true, photoUrl: true, producerProfile: { select: { farmName: true, producerType: true } } } },
   produceType: true,
   pickupLocation: true,
   participants: { include: participantInclude, orderBy: { createdAt: "asc" } },
@@ -115,6 +119,12 @@ export function toGroupBuySummary(row: GroupBuySummaryRow | GroupBuyDetailRow): 
     status: asEnum(GROUP_BUY_STATUSES, row.status, "group buy status"),
     produceType: toProduceType(row.produceType),
     pickupLocation: toPickupLocation(row.pickupLocation),
+    pricePerLbUsd: row.priceCentsPerLb == null ? null : centsToUsd(row.priceCentsPerLb),
+    sellerName: row.createdBy.producerProfile?.farmName ?? row.createdBy.name,
+    sellerPhotoUrl: row.createdBy.photoUrl,
+    producerType: row.createdBy.producerProfile
+      ? (row.createdBy.producerProfile.producerType as "at_home" | "local_farmer" | "large_scale_farmer")
+      : null,
     targetLbs: hundredthsToLbs(row.targetLbsX100),
     committedLbs: hundredthsToLbs(committed),
     remainingLbs: hundredthsToLbs(Math.max(row.targetLbsX100 - committed, 0)),

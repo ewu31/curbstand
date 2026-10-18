@@ -8,7 +8,7 @@ export type GroupBuyStatus =
   | "completed"
   | "cancelled";
 
-export type BidStatus = "submitted" | "selected" | "rejected";
+export type BidStatus = "submitted" | "selected" | "rejected" | "not_selected" | "withdrawn";
 
 export type DepositStatus = "pending" | "confirmed_manual" | "refunded_manual" | "forfeited_manual";
 
@@ -46,7 +46,7 @@ export type Participant = {
   requestedLbs: number;
   depositAmount: number;
   depositStatus: DepositStatus;
-  completionStatus: "pending" | "completed";
+  completionStatus: "pending" | "completed" | "no_show";
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -59,7 +59,20 @@ export type GroupBuyEvent = {
   payload: Record<string, unknown>;
 };
 
+export type SellerProfile = {
+  id?: string;
+  name: string;
+  producerType?: "at_home" | "local_farmer" | "large_scale_farmer" | null;
+  photoUrl?: string | null;
+  bio?: string | null;
+  rating?: number | null;
+  reviewCount?: number;
+};
+
 export type GroupBuySummary = {
+  pricePerLb?: number | null;
+  seller?: SellerProfile | null;
+  description?: string | null;
   id: string;
   produceType: string;
   targetLbs: number;
@@ -90,6 +103,7 @@ export type Catalog = {
 };
 
 export type CreateGroupBuyInput = {
+  pricePerLb: number;
   produceType: string;
   targetLbs: number;
   pickupLocationId: string;

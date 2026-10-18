@@ -1,13 +1,13 @@
 import type { Bid, DepositStatus, GroupBuyStatus, Produce, PickupLocation } from "./types";
 
-const KNOWN_PHOTOS = new Set(["apples", "carrots", "tomatoes", "leafy-greens"]);
+const PHOTO_JPG = new Set(["apples", "carrots", "tomatoes", "leafy-greens"]);
 
 export function produceName(slug: string, produce: Produce[]) {
   return produce.find((item) => item.slug === slug)?.displayName ?? slug;
 }
 
 export function producePhoto(slug: string) {
-  return KNOWN_PHOTOS.has(slug) ? `/produce/${slug}.jpg` : "";
+  return PHOTO_JPG.has(slug) ? `/produce/${slug}.jpg` : `/produce/${slug}.svg`;
 }
 
 export function placeLabel(location: PickupLocation | null) {
@@ -53,7 +53,7 @@ export function statusLabel(status: GroupBuyStatus) {
     case "funding":
       return "Filling";
     case "matched":
-      return "Matched";
+      return "Confirmed";
     case "ready_for_pickup":
       return "Ready for pickup";
     case "completed":

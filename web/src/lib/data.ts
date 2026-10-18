@@ -12,8 +12,6 @@ export const listGroupBuys: typeof live.listGroupBuys = (...args) => source().li
 export const getGroupBuy: typeof live.getGroupBuy = (...args) => source().getGroupBuy(...args);
 export const createGroupBuy: typeof live.createGroupBuy = (...args) => source().createGroupBuy(...args);
 export const joinGroupBuy: typeof live.joinGroupBuy = (...args) => source().joinGroupBuy(...args);
-export const placeBid: typeof live.placeBid = (...args) => source().placeBid(...args);
-export const selectBid: typeof live.selectBid = (...args) => source().selectBid(...args);
 export const updateStatus: typeof live.updateStatus = (...args) => source().updateStatus(...args);
 export const listMine: typeof live.listMine = (...args) => source().listMine(...args);
 export const updateDeposit: typeof fixtures.updateDeposit = (...args) => {
