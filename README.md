@@ -5,12 +5,11 @@ with local producers at approved public pickup locations.
 
 ## Backend development
 
-The backend uses a TypeScript workspace, Hono API, Drizzle ORM, and PostgreSQL.
+The backend uses a TypeScript workspace, Fastify API, Prisma ORM, and SQLite.
 
 ### Setup
 
-1. Copy `.env.example` to `.env` and set `DATABASE_URL`.
-2. Start PostgreSQL.
+1. Copy `.env.example` to `.env`. The default database is a local SQLite file.
 3. Install dependencies:
 
    ```sh
@@ -60,5 +59,7 @@ only still-open candidates are updated.
 - `POST /group-buys/:id/select-bid`
 - `POST /jobs/resolve-group-buys`
 
-All money and quantity values are stored as PostgreSQL `numeric` values and
-serialized with explicit units in API responses.
+All money and quantity values are stored as fixed two-decimal strings in SQLite
+and serialized with explicit units in API responses. Prisma's SQLite connector
+does not provide PostgreSQL-style decimal or enum columns, so the API validates
+these values and stores the corresponding status strings at the boundary.

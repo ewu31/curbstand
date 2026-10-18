@@ -1,18 +1,22 @@
-import { createDb, schema } from "./index.js";
+import { prisma } from "./index.js";
 
-const { db, client } = createDb();
-
-await db.insert(schema.produceCatalog).values([
+for (const produce of [
   { slug: "apples", displayName: "Apples" },
   { slug: "carrots", displayName: "Carrots" },
   { slug: "tomatoes", displayName: "Tomatoes" },
   { slug: "leafy-greens", displayName: "Leafy greens" },
-]).onConflictDoNothing();
+]) {
+  const existing = await prisma.produceCatalog.findUnique({ where: { slug: produce.slug } });
+  if (!existing) await prisma.produceCatalog.create({ data: produce });
+}
 
-await db.insert(schema.pickupLocations).values([
+for (const location of [
   { name: "UW District public pickup", address: "University District, Seattle" },
   { name: "Ballard public pickup", address: "Ballard, Seattle" },
   { name: "Bellevue public pickup", address: "Downtown Bellevue" },
-]).onConflictDoNothing();
+]) {
+  const existing = await prisma.pickupLocation.findFirst({ where: { name: location.name } });
+  if (!existing) await prisma.pickupLocation.create({ data: location });
+}
 
-await client.end();
+await prisma.$disconnect();

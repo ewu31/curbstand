@@ -10,8 +10,7 @@
   },
   "dependencies": {
     "@curbstand/db": "0.1.0",
-    "@hono/node-server": "^1.13.7",
-    "hono": "^4.6.14",
+    "fastify": "^5.2.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
